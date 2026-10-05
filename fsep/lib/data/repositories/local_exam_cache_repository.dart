@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:sqflite_common_ffi/sqflite_ffi' show ConflictAlgorithm;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show ConflictAlgorithm;
 
 import '../../core/database/local_database_schema.dart';
 import '../../core/database/local_database_service.dart';

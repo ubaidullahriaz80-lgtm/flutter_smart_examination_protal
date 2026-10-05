@@ -1,0 +1,21 @@
+# Root .gitignore
+.env
+fsep-backend/.env
+fsep-backend/vendor/
+fsep-backend/storage/*.key
+fsep-backend/storage/logs/*.log
+fsep-backend/bootstrap/cache/*
+!fsep-backend/bootstrap/cache/.gitignore
+fsep-backend/public/storage
+
+fsep/.dart_tool/
+fsep/build/
+fsep/.flutter-plugins
+fsep/.flutter-plugins-dependencies
+fsep/.pub-cache/
+fsep/.pub/
+
+.idea/
+.claude/
+.artifacts/
+*.log

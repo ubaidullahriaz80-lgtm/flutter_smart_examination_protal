@@ -32,8 +32,8 @@ class AppConfig {
 
   static String get apiBaseUrl => _apiBaseUrls[environment]!;
 
-  static Duration get connectTimeout => const Duration(seconds: 15);
-  static Duration get receiveTimeout => const Duration(seconds: 15);
+  static Duration get connectTimeout => const Duration(seconds: 60);
+  static Duration get receiveTimeout => const Duration(seconds: 60);
 
   static Environment _resolveEnvironment(String value) {
     switch (value) {

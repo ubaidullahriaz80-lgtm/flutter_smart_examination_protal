@@ -503,6 +503,36 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                             ),
                           ),
                         ),
+                        if (state is AiGeneratorLoading) ...[
+                          const SizedBox(height: 16),
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  LinearProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.auto_awesome, color: Colors.teal),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Generating questions with Google Gemini AI...',
+                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 6),
+                                  Text(
+                                    'This usually takes 5–15 seconds. Please wait.',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                         if (state is AiGeneratorResultReady) ...[
                           const SizedBox(height: 24),
                           Text(

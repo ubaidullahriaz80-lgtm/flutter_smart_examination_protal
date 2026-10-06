@@ -32,6 +32,10 @@ class QuestionBankRepository {
         'count': count,
         'marks': marks,
       },
+      options: Options(
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 2),
+      ),
     );
 
     final data = response.data;

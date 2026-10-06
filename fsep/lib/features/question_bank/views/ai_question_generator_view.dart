@@ -43,6 +43,7 @@ class AiQuestionGeneratorView extends StatefulWidget {
 class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   final _formKey = GlobalKey<FormState>();
   final ExamRepository _examRepository = ExamRepository();
+  final ScrollController _scrollController = ScrollController();
 
   late Future<List<ExamModel>> _examsFuture;
 
@@ -82,6 +83,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _bloc.close();
     _topicController.dispose();
     _countController.dispose();
@@ -147,8 +149,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
         questionTypes: _selectedQuestionTypes.toList(),
         difficulty: _difficulty,
         bloomTaxonomy: _bloomLevel,
-        count: int.parse(_countController.text),
-        marks: int.parse(_marksController.text),
+        count: int.tryParse(_countController.text) ?? 3,
+        marks: int.tryParse(_marksController.text) ?? 5,
       ));
     } else {
       final paths = _selectedFiles.map((f) => f.path).whereType<String>().toList();
@@ -158,8 +160,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
         questionTypes: _selectedQuestionTypes.toList(),
         difficulty: _difficulty,
         bloomTaxonomy: _bloomLevel,
-        count: int.parse(_countController.text),
-        marks: int.parse(_marksController.text),
+        count: int.tryParse(_countController.text) ?? 3,
+        marks: int.tryParse(_marksController.text) ?? 5,
       ));
     }
   }
@@ -211,7 +213,27 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
         ),
         body: BlocListener<AiGeneratorBloc, AiGeneratorState>(
           listener: (context, state) {
-            if (state is AiGeneratorJobStarted) {
+            if (state is AiGeneratorResultReady) {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Generated ${state.drafts.length} question(s) successfully!',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    _scrollController.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeOut,
+                  );
+                }
+              });
+            } else if (state is AiGeneratorJobStarted) {
               _selectedFiles.clear();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -229,6 +251,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
               return Align(
                 alignment: Alignment.topCenter,
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   padding: const EdgeInsets.all(16),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(

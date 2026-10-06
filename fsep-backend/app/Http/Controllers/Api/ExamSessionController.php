@@ -336,7 +336,10 @@ class ExamSessionController extends Controller
             if (ob_get_level() > 0) ob_flush();
             flush();
 
-            while (true) {
+            $maxIterations = 5;
+            $iterations = 0;
+
+            while ($iterations < $maxIterations) {
                 if (connection_aborted()) break;
 
                 $updates = BehavioralRiskScore::with(['session.candidate', 'session.behaviorEvents' => function($q) {
@@ -379,6 +382,7 @@ class ExamSessionController extends Controller
                 }
 
                 sleep(2);
+                $iterations++;
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

@@ -65,7 +65,7 @@ Then:
 
 ```bash
 php artisan migrate --seed
-php artisan serve
+php artisan serve --no-reload
 ```
 
 The backend will be available at:

@@ -58,6 +58,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   String _difficulty = _difficulties[1]; // medium
   String _bloomLevel = _bloomLevels[1]; // understand
 
+  late final AiGeneratorBloc _bloc;
+
   void _applyConfiguration(ExamQuestionConfigurationModel config) {
     setState(() {
       _selectedQuestionTypes.clear();
@@ -74,11 +76,13 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   @override
   void initState() {
     super.initState();
+    _bloc = AiGeneratorBloc(repository: QuestionBankRepository());
     _examsFuture = _examRepository.getExams();
   }
 
   @override
   void dispose() {
+    _bloc.close();
     _topicController.dispose();
     _countController.dispose();
     _marksController.dispose();
@@ -134,10 +138,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
       return;
     }
 
-    final bloc = context.read<AiGeneratorBloc>();
-
     if (_source == GenerationSource.topic) {
-      bloc.add(AiGeneratorGenerateFromTopic(
+      _bloc.add(AiGeneratorGenerateFromTopic(
         examIds: [for (final exam in _selectedExams) exam.id],
         topic: _topicController.text.trim(),
         questionTypes: _selectedQuestionTypes.toList(),
@@ -148,7 +150,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
       ));
     } else {
       final paths = _selectedFiles.map((f) => f.path).whereType<String>().toList();
-      bloc.add(AiGeneratorUploadDocuments(
+      _bloc.add(AiGeneratorUploadDocuments(
         filePaths: paths,
         examIds: [for (final exam in _selectedExams) exam.id],
         questionTypes: _selectedQuestionTypes.toList(),
@@ -199,8 +201,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => AiGeneratorBloc(repository: QuestionBankRepository()),
+    return BlocProvider.value(
+      value: _bloc,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('AI Question Generator'),

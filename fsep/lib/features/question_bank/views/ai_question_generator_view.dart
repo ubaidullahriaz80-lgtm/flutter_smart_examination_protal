@@ -114,6 +114,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   }
 
   void _generate(BuildContext context) {
+    FocusScope.of(context).unfocus();
+
     if (_source == GenerationSource.topic) {
       if (!_formKey.currentState!.validate()) return;
     } else {

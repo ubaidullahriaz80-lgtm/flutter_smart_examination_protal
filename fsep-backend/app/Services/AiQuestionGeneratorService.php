@@ -152,15 +152,16 @@ class AiQuestionGeneratorService
                 ]);
         } catch (Throwable $e) {
             Log::warning('AI question generation request failed', ['error' => $e->getMessage()]);
-            throw new AiProviderException('Could not reach the AI provider. Please try again.');
+            throw new AiProviderException('Could not reach the AI provider: ' . $e->getMessage());
         }
 
         if ($response->failed()) {
+            $errMessage = $response->json('error.message') ?? $response->body();
             Log::warning('AI question generation returned an error', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
-            throw new AiProviderException('The AI provider returned an error. Please try again.');
+            throw new AiProviderException('The AI provider returned an error: ' . $errMessage);
         }
 
         return $response->json() ?? [];

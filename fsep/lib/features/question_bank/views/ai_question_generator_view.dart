@@ -43,7 +43,6 @@ class AiQuestionGeneratorView extends StatefulWidget {
 class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   final _formKey = GlobalKey<FormState>();
   final ExamRepository _examRepository = ExamRepository();
-  final ScrollController _scrollController = ScrollController();
 
   late Future<List<ExamModel>> _examsFuture;
 
@@ -83,7 +82,6 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _bloc.close();
     _topicController.dispose();
     _countController.dispose();
@@ -222,17 +220,9 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                       'Generated ${state.drafts.length} question(s) successfully!',
                     ),
                     backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 4),
                   ),
                 );
-              Future.delayed(const Duration(milliseconds: 150), () {
-                if (mounted && _scrollController.hasClients) {
-                  _scrollController.animateTo(
-                    _scrollController.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOut,
-                  );
-                }
-              });
             } else if (state is AiGeneratorJobStarted) {
               _selectedFiles.clear();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -251,7 +241,6 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
               return Align(
                 alignment: Alignment.topCenter,
                 child: SingleChildScrollView(
-                  controller: _scrollController,
                   padding: const EdgeInsets.all(16),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(

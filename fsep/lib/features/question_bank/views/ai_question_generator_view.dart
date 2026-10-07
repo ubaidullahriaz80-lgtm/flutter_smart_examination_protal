@@ -587,16 +587,19 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: int.tryParse(_marksController.text) ?? 1,
+                child: TextFormField(
+                  controller: _marksController,
+                  keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Marks per Question',
                   ),
-                  items: [
-                    for (final val in [1, 2, 3, 4, 5, 10])
-                      DropdownMenuItem(value: val, child: Text('$val')),
-                  ],
-                  onChanged: (val) => setState(() => _marksController.text = val!.toString()),
+                  validator: (value) {
+                    final n = int.tryParse(value ?? '');
+                    if (n == null || n < 1 || n > 100) {
+                      return '1-100';
+                    }
+                    return null;
+                  },
                 ),
               ),
             ],

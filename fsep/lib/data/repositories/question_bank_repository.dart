@@ -47,7 +47,7 @@ class QuestionBankRepository {
 
     return questions
         .map((q) =>
-            GeneratedQuestionDraft.fromJson(q as Map<String, dynamic>))
+            GeneratedQuestionDraft.fromJson((q as Map).cast<String, dynamic>()))
         .toList();
   }
 

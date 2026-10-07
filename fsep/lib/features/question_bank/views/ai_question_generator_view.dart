@@ -41,6 +41,7 @@ class AiQuestionGeneratorView extends StatefulWidget {
 
 class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   final _formKey = GlobalKey<FormState>();
+  final GlobalKey _resultsKey = GlobalKey();
   final ExamRepository _examRepository = ExamRepository();
 
   late Future<List<ExamModel>> _examsFuture;
@@ -227,6 +228,15 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                     duration: const Duration(seconds: 4),
                   ),
                 );
+              Future.delayed(const Duration(milliseconds: 200), () {
+                if (_resultsKey.currentContext != null) {
+                  Scrollable.ensureVisible(
+                    _resultsKey.currentContext!,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                  );
+                }
+              });
             } else if (state is AiGeneratorJobStarted) {
               _selectedFiles.clear();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -256,55 +266,12 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (state is AiGeneratorResultReady) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Generated Questions (${state.drafts.length})',
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                                ),
-                                Chip(
-                                  avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
-                                  label: const Text('AI Ready'),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ],
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: _buildFormContent(context, state),
                             ),
-                            const SizedBox(height: 12),
-                            for (var i = 0; i < state.drafts.length; i++) ...[
-                              _GeneratedQuestionCard(
-                                key: ValueKey('draft_card_$i'),
-                                index: i,
-                                draft: state.drafts[i],
-                                saving: state.savingIndexes.contains(i),
-                                saved: state.savedIndexes.contains(i),
-                                onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
-                                onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
-                              ),
-                              SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
-                            ],
-                            const SizedBox(height: 16),
-                            Card(
-                              child: ExpansionTile(
-                                title: const Text('Generator Parameters'),
-                                leading: const Icon(Icons.tune_outlined),
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: _buildFormContent(context, state),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ] else ...[
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: _buildFormContent(context, state),
-                              ),
-                            ),
-                          ],
+                          ),
                           if (state is AiGeneratorLoading) ...[
                             const SizedBox(height: 16),
                             const Card(
@@ -332,6 +299,44 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ),
+                          ],
+                          if (state is AiGeneratorResultReady) ...[
+                            const SizedBox(height: 24),
+                            Container(
+                              key: _resultsKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Generated Questions (${state.drafts.length})',
+                                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                      ),
+                                      Chip(
+                                        avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
+                                        label: const Text('AI Ready'),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  for (var i = 0; i < state.drafts.length; i++) ...[
+                                    _GeneratedQuestionCard(
+                                      key: ValueKey('draft_card_$i'),
+                                      index: i,
+                                      draft: state.drafts[i],
+                                      saving: state.savingIndexes.contains(i),
+                                      saved: state.savedIndexes.contains(i),
+                                      onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
+                                      onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
+                                    ),
+                                    SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
+                                  ],
+                                ],
                               ),
                             ),
                           ],

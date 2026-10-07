@@ -754,7 +754,7 @@ class _GeneratedQuestionCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 _MetaChip(_titleCase(draft.questionType)),
-                _MetaChip('${draft.marks.toInt()} marks'),
+                _MetaChip('${draft.marks} marks'),
                 _MetaChip(_titleCase(draft.difficulty)),
                 _MetaChip(_titleCase(draft.bloomTaxonomy)),
                 if (draft.topicTag != null) _MetaChip(draft.topicTag!),

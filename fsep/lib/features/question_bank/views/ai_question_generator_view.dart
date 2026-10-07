@@ -244,112 +244,115 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
             builder: (context, state) {
               return Align(
                 alignment: Alignment.topCenter,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.6,
-                      minWidth: context.isMobile ? double.infinity : 600,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (state is AiGeneratorResultReady) ...[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Generated Questions (${state.drafts.length})',
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                              Chip(
-                                avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
-                                label: const Text('AI Ready'),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          for (var i = 0; i < state.drafts.length; i++) ...[
-                            _GeneratedQuestionCard(
-                              key: ValueKey('draft_card_$i'),
-                              index: i,
-                              draft: state.drafts[i],
-                              saving: state.savingIndexes.contains(i),
-                              saved: state.savedIndexes.contains(i),
-                              onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
-                              onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
-                            ),
-                            SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
-                          ],
-                          const SizedBox(height: 16),
-                          Card(
-                            child: ExpansionTile(
-                              title: const Text('Generator Parameters'),
-                              leading: const Icon(Icons.tune_outlined),
+                child: Form(
+                  key: _formKey,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.6,
+                        minWidth: context.isMobile ? double.infinity : 600,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (state is AiGeneratorResultReady) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: _buildForm(context, state),
+                                Text(
+                                  'Generated Questions (${state.drafts.length})',
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                Chip(
+                                  avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
+                                  label: const Text('AI Ready'),
+                                  visualDensity: VisualDensity.compact,
                                 ),
                               ],
                             ),
-                          ),
-                        ] else ...[
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: _buildForm(context, state),
-                            ),
-                          ),
-                        ],
-                        if (state is AiGeneratorLoading) ...[
-                          const SizedBox(height: 16),
-                          const Card(
-                            child: Padding(
-                              padding: EdgeInsets.all(20),
-                              child: Column(
+                            const SizedBox(height: 12),
+                            for (var i = 0; i < state.drafts.length; i++) ...[
+                              _GeneratedQuestionCard(
+                                key: ValueKey('draft_card_$i'),
+                                index: i,
+                                draft: state.drafts[i],
+                                saving: state.savingIndexes.contains(i),
+                                saved: state.savedIndexes.contains(i),
+                                onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
+                                onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
+                              ),
+                              SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
+                            ],
+                            const SizedBox(height: 16),
+                            Card(
+                              child: ExpansionTile(
+                                title: const Text('Generator Parameters'),
+                                leading: const Icon(Icons.tune_outlined),
                                 children: [
-                                  LinearProgressIndicator(),
-                                  SizedBox(height: 16),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.auto_awesome, color: Colors.teal),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Generating questions with Google Gemini AI...',
-                                        style: TextStyle(fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(height: 6),
-                                  Text(
-                                    'This usually takes 5–15 seconds. Please wait.',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: _buildFormContent(context, state),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
-                        if (state is AiGeneratorJobStarted) ...[
-                          const SizedBox(height: 24),
-                          _ActiveJobCard(
-                            jobId: state.jobId,
-                            status: state.status,
-                            onRefresh: () => context.read<AiGeneratorBloc>().add(AiGeneratorPollJobStatus(state.jobId)),
-                            onViewResults: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      AiQuestionReviewView(jobId: state.jobId),
+                          ] else ...[
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: _buildFormContent(context, state),
+                              ),
+                            ),
+                          ],
+                          if (state is AiGeneratorLoading) ...[
+                            const SizedBox(height: 16),
+                            const Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Column(
+                                  children: [
+                                    LinearProgressIndicator(),
+                                    SizedBox(height: 16),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.auto_awesome, color: Colors.teal),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Generating questions with Google Gemini AI...',
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'This usually takes 5–15 seconds. Please wait.',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            ),
+                          ],
+                          if (state is AiGeneratorJobStarted) ...[
+                            const SizedBox(height: 24),
+                            _ActiveJobCard(
+                              jobId: state.jobId,
+                              status: state.status,
+                              onRefresh: () => context.read<AiGeneratorBloc>().add(AiGeneratorPollJobStatus(state.jobId)),
+                              onViewResults: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        AiQuestionReviewView(jobId: state.jobId),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -361,151 +364,80 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
     );
   }
 
-  Widget _buildForm(BuildContext context, AiGeneratorState state) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget _buildFormContent(BuildContext context, AiGeneratorState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Generate exam questions with AI',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 16),
+        SegmentedButton<GenerationSource>(
+          segments: const [
+            ButtonSegment(
+              value: GenerationSource.topic,
+              label: Text('Topic'),
+              icon: Icon(Icons.topic_outlined),
+            ),
+            ButtonSegment(
+              value: GenerationSource.documents,
+              label: Text('Syllabus Documents'),
+              icon: Icon(Icons.description_outlined),
+            ),
+          ],
+          selected: {_source},
+          onSelectionChanged: (set) =>
+              setState(() => _source = set.first),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Exams / Courses',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        if (_selectedExams.isEmpty)
           Text(
-            'Generate exam questions with AI',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 16),
-          SegmentedButton<GenerationSource>(
-            segments: const [
-              ButtonSegment(
-                value: GenerationSource.topic,
-                label: Text('Topic'),
-                icon: Icon(Icons.topic_outlined),
-              ),
-              ButtonSegment(
-                value: GenerationSource.documents,
-                label: Text('Syllabus Documents'),
-                icon: Icon(Icons.description_outlined),
-              ),
-            ],
-            selected: {_source},
-            onSelectionChanged: (set) =>
-                setState(() => _source = set.first),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Exams / Courses',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          const SizedBox(height: 8),
-          if (_selectedExams.isEmpty)
-            Text(
-              'No exams/courses selected',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.outline,
-                fontStyle: FontStyle.italic,
-              ),
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final exam in _selectedExams)
-                  Chip(
-                    label: Text(
-                      exam.courseCode != null
-                          ? '${exam.title} (${exam.courseCode})'
-                          : exam.title,
-                    ),
-                    onDeleted: () => _removeExam(exam),
+            'No exams/courses selected',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.outline,
+              fontStyle: FontStyle.italic,
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final exam in _selectedExams)
+                Chip(
+                  label: Text(
+                    exam.courseCode != null
+                        ? '${exam.title} (${exam.courseCode})'
+                        : exam.title,
                   ),
-              ],
-            ),
-          const SizedBox(height: 8),
-          FutureBuilder<List<ExamModel>>(
-            future: _examsFuture,
-            builder: (context, snapshot) {
-              final exams = snapshot.data ?? [];
-              return OutlinedButton.icon(
-                onPressed: exams.isEmpty
-                    ? null
-                    : () => _addExam(exams),
-                icon: const Icon(Icons.add),
-                label: const Text('Add Exam/Course'),
-              );
-            },
-          ),
-          if (_selectedExams.any((e) => e.questionConfigurations.isNotEmpty)) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Configurations from Selected Exams',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final exam in _selectedExams)
-                  for (final config in exam.questionConfigurations)
-                    ActionChip(
-                      avatar: const Icon(Icons.auto_awesome_outlined, size: 16),
-                      label: Text('${_titleCase(config.questionType)} x${config.questionCount}'),
-                      onPressed: () => _applyConfiguration(config),
-                    ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          if (_source == GenerationSource.topic)
-            TextFormField(
-              controller: _topicController,
-              decoration: const InputDecoration(
-                labelText: 'Topic',
-                hintText: 'e.g. Computer Networks',
-              ),
-              validator: (value) =>
-                  (value == null || value.trim().isEmpty)
-                      ? 'Topic is required'
-                      : null,
-            )
-          else ...[
-            Text(
-              'Syllabus / Lecture Notes (PDF/TXT)',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 8),
-            if (_selectedFiles.isEmpty)
-              Text(
-                'No documents selected (Max 10, 20MB each)',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.outline,
-                  fontStyle: FontStyle.italic,
+                  onDeleted: () => _removeExam(exam),
                 ),
-              )
-            else
-              Column(
-                children: [
-                  for (var i = 0; i < _selectedFiles.length; i++)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.file_present),
-                      title: Text(_selectedFiles[i].name),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => _removeFile(i),
-                      ),
-                    ),
-                ],
-              ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _selectedFiles.length >= 10 ? null : _pickFiles,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Add Document'),
-            ),
-          ],
+            ],
+          ),
+        const SizedBox(height: 8),
+        FutureBuilder<List<ExamModel>>(
+          future: _examsFuture,
+          builder: (context, snapshot) {
+            final exams = snapshot.data ?? [];
+            return OutlinedButton.icon(
+              onPressed: exams.isEmpty
+                  ? null
+                  : () => _addExam(exams),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Exam/Course'),
+            );
+          },
+        ),
+        if (_selectedExams.any((e) => e.questionConfigurations.isNotEmpty)) ...[
           const SizedBox(height: 16),
           Text(
-            'Question Types',
+            'Configurations from Selected Exams',
             style: Theme.of(context).textTheme.labelLarge,
           ),
           const SizedBox(height: 8),
@@ -513,117 +445,185 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final type in _questionTypes)
-                FilterChip(
-                  label: Text(_titleCase(type)),
-                  selected: _selectedQuestionTypes.contains(type),
-                  onSelected: (selected) => setState(() {
-                    if (selected) {
-                      _selectedQuestionTypes.add(type);
-                    } else {
-                      _selectedQuestionTypes.remove(type);
-                    }
-                  }),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _difficulty,
-            isExpanded: true,
-            decoration:
-                const InputDecoration(labelText: 'Difficulty'),
-            items: [
-              for (final level in _difficulties)
-                DropdownMenuItem(
-                  value: level,
-                  child: Text(
-                    _titleCase(level),
-                    overflow: TextOverflow.ellipsis,
+              for (final exam in _selectedExams)
+                for (final config in exam.questionConfigurations)
+                  ActionChip(
+                    avatar: const Icon(Icons.auto_awesome_outlined, size: 16),
+                    label: Text('${_titleCase(config.questionType)} x${config.questionCount}'),
+                    onPressed: () => _applyConfiguration(config),
                   ),
-                ),
             ],
-            onChanged: (value) =>
-                setState(() => _difficulty = value!),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _bloomLevel,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: "Bloom's Taxonomy",
-            ),
-            items: [
-              for (final level in _bloomLevels)
-                DropdownMenuItem(
-                  value: level,
-                  child: Text(
-                    _titleCase(level),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-            onChanged: (value) =>
-                setState(() => _bloomLevel = value!),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _countController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Number of Questions',
-                  ),
-                  validator: (value) {
-                    final n = int.tryParse(value ?? '');
-                    if (n == null || n < 1 || n > 10) {
-                      return '1-10';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextFormField(
-                  controller: _marksController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Marks per Question',
-                  ),
-                  validator: (value) {
-                    final n = int.tryParse(value ?? '');
-                    if (n == null || n < 1 || n > 100) {
-                      return '1-100';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: state is AiGeneratorLoading ? null : () => _generate(context),
-            icon: state is AiGeneratorLoading
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.auto_awesome),
-            label: Text(
-              state is AiGeneratorLoading
-                  ? 'Generating...'
-                  : 'Generate Questions',
-            ),
           ),
         ],
-      ),
+        const SizedBox(height: 16),
+        if (_source == GenerationSource.topic)
+          TextFormField(
+            controller: _topicController,
+            decoration: const InputDecoration(
+              labelText: 'Topic',
+              hintText: 'e.g. Computer Networks',
+            ),
+            validator: (value) =>
+                (value == null || value.trim().isEmpty)
+                    ? 'Topic is required'
+                    : null,
+          )
+        else ...[
+          Text(
+            'Syllabus / Lecture Notes (PDF/TXT)',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          if (_selectedFiles.isEmpty)
+            Text(
+              'No documents selected (Max 10, 20MB each)',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.outline,
+                fontStyle: FontStyle.italic,
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (var i = 0; i < _selectedFiles.length; i++)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.file_present),
+                    title: Text(_selectedFiles[i].name),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => _removeFile(i),
+                    ),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _selectedFiles.length >= 10 ? null : _pickFiles,
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Add Document'),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Text(
+          'Question Types',
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final type in _questionTypes)
+              FilterChip(
+                label: Text(_titleCase(type)),
+                selected: _selectedQuestionTypes.contains(type),
+                onSelected: (selected) => setState(() {
+                  if (selected) {
+                    _selectedQuestionTypes.add(type);
+                  } else {
+                    _selectedQuestionTypes.remove(type);
+                  }
+                }),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: _difficulty,
+          isExpanded: true,
+          decoration:
+              const InputDecoration(labelText: 'Difficulty'),
+          items: [
+            for (final level in _difficulties)
+              DropdownMenuItem(
+                value: level,
+                child: Text(
+                  _titleCase(level),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (value) =>
+              setState(() => _difficulty = value!),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: _bloomLevel,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: "Bloom's Taxonomy",
+          ),
+          items: [
+            for (final level in _bloomLevels)
+              DropdownMenuItem(
+                value: level,
+                child: Text(
+                  _titleCase(level),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (value) =>
+              setState(() => _bloomLevel = value!),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _countController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Number of Questions',
+                ),
+                validator: (value) {
+                  final n = int.tryParse(value ?? '');
+                  if (n == null || n < 1 || n > 10) {
+                    return '1-10';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: _marksController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Marks per Question',
+                ),
+                validator: (value) {
+                  final n = int.tryParse(value ?? '');
+                  if (n == null || n < 1 || n > 100) {
+                    return '1-100';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          onPressed: state is AiGeneratorLoading ? null : () => _generate(context),
+          icon: state is AiGeneratorLoading
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Icon(Icons.auto_awesome),
+          label: Text(
+            state is AiGeneratorLoading
+                ? 'Generating...'
+                : 'Generate Questions',
+          ),
+        ),
+      ],
     );
   }
 }

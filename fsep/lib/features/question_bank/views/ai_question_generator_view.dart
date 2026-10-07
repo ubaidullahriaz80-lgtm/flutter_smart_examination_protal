@@ -684,6 +684,7 @@ class _ActiveJobCard extends StatelessWidget {
 
 class _GeneratedQuestionCard extends StatelessWidget {
   const _GeneratedQuestionCard({
+    super.key,
     required this.index,
     required this.draft,
     required this.saving,

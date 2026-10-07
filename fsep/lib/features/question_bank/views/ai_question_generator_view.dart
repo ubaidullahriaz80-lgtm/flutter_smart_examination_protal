@@ -224,11 +224,11 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                     backgroundColor: Colors.green,
                   ),
                 );
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scrollController.hasClients) {
+              Future.delayed(const Duration(milliseconds: 150), () {
+                if (mounted && _scrollController.hasClients) {
                   _scrollController.animateTo(
                     _scrollController.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 600),
+                    duration: const Duration(milliseconds: 500),
                     curve: Curves.easeOut,
                   );
                 }
@@ -565,6 +565,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                           const SizedBox(height: 12),
                           for (var i = 0; i < state.drafts.length; i++) ...[
                             _GeneratedQuestionCard(
+                              key: ValueKey('draft_card_$i'),
                               index: i,
                               draft: state.drafts[i],
                               saving: state.savingIndexes.contains(i),
@@ -572,7 +573,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                               onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
                               onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
                           ],
                         ],
                         if (state is AiGeneratorJobStarted) ...[

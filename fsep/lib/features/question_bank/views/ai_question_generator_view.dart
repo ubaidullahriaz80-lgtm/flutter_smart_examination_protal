@@ -129,13 +129,19 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
 
     if (_selectedExams.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one exam/course.')),
+        const SnackBar(
+          content: Text('Please select at least one exam/course before generating.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
     if (_selectedQuestionTypes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one question type.')),
+        const SnackBar(
+          content: Text('Please select at least one question type.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -430,6 +436,13 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
           future: _examsFuture,
           builder: (context, snapshot) {
             final exams = snapshot.data ?? [];
+            if (_selectedExams.isEmpty && exams.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _selectedExams.isEmpty) {
+                  setState(() => _selectedExams.add(exams.first));
+                }
+              });
+            }
             return OutlinedButton.icon(
               onPressed: exams.isEmpty
                   ? null

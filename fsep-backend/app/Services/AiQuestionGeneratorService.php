@@ -132,39 +132,51 @@ class AiQuestionGeneratorService
             $typeInstructions,
         );
 
-        $model = config('services.gemini.model');
+        $primaryModel = config('services.gemini.model', 'gemini-3.5-flash');
+        $modelsToTry = array_unique([$primaryModel, 'gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']);
 
-        try {
-            $response = Http::withHeaders([
-                'x-goog-api-key' => $apiKey,
-                'content-type' => 'application/json',
-            ])
-                ->timeout(60)
-                ->retry(2, 2000)
-                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                    'contents' => [
-                        ['role' => 'user', 'parts' => [['text' => $prompt]]],
-                    ],
-                    'generationConfig' => [
-                        'responseMimeType' => 'application/json',
-                        'responseSchema' => $schema,
-                    ],
-                ]);
-        } catch (Throwable $e) {
-            Log::warning('AI question generation request failed', ['error' => $e->getMessage()]);
-            throw new AiProviderException('Could not reach the AI provider: ' . $e->getMessage());
+        $lastError = null;
+
+        foreach ($modelsToTry as $model) {
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
+                try {
+                    $response = Http::withHeaders([
+                        'x-goog-api-key' => $apiKey,
+                        'content-type' => 'application/json',
+                    ])
+                        ->timeout(60)
+                        ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
+                            'contents' => [
+                                ['role' => 'user', 'parts' => [['text' => $prompt]]],
+                            ],
+                            'generationConfig' => [
+                                'responseMimeType' => 'application/json',
+                                'responseSchema' => $schema,
+                            ],
+                        ]);
+
+                    if ($response->successful()) {
+                        return $response->json() ?? [];
+                    }
+
+                    $errMessage = $response->json('error.message') ?? $response->body();
+                    $lastError = $errMessage;
+
+                    if ($response->status() === 503 || $response->status() === 429) {
+                        usleep(1000000);
+                        continue;
+                    }
+
+                    break;
+                } catch (Throwable $e) {
+                    $lastError = $e->getMessage();
+                    usleep(500000);
+                }
+            }
         }
 
-        if ($response->failed()) {
-            $errMessage = $response->json('error.message') ?? $response->body();
-            Log::warning('AI question generation returned an error', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-            throw new AiProviderException('The AI provider returned an error: ' . $errMessage);
-        }
-
-        return $response->json() ?? [];
+        Log::warning('AI question generation returned an error', ['last_error' => $lastError]);
+        throw new AiProviderException('The AI provider returned an error: ' . $lastError);
     }
 
     private function extractQuestions(array $response): array

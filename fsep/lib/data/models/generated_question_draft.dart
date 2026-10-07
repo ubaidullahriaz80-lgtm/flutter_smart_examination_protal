@@ -1,9 +1,3 @@
-/// A single AI-generated question, returned by POST /questions/generate
-/// for preview only — it has no `id`/`review_status` because it has not
-/// been saved to the Question Bank yet. Saving it (via
-/// QuestionBankRepository.createQuestion) is a separate, explicit step so
-/// generated output always goes through review before candidates can see
-/// it, per the existing Question Bank review_status workflow.
 class GeneratedQuestionDraft {
   const GeneratedQuestionDraft({
     required this.examId,
@@ -12,9 +6,9 @@ class GeneratedQuestionDraft {
     required this.marks,
     required this.difficulty,
     required this.bloomTaxonomy,
-    required this.topicTag,
+    this.topicTag,
     required this.options,
-    required this.correctAnswer,
+    this.correctAnswer,
     this.keywords = const [],
     this.regexPatterns = const [],
     required this.isAiGenerated,
@@ -27,14 +21,6 @@ class GeneratedQuestionDraft {
   final String difficulty;
   final String bloomTaxonomy;
   final String? topicTag;
-
-  /// A flat string list for every AI-generatable type (mcq's choices,
-  /// code_snippet's single-element [language] list). Manual creation of a
-  /// 'matching' question (never AI-generated) is the one case that puts
-  /// {left, right} maps here instead — typed as Object rather than String
-  /// so both shapes fit without a second field, since this class's only
-  /// job is to carry values straight into the existing POST /questions
-  /// body.
   final List<Object> options;
   final String? correctAnswer;
   final List<String> keywords;
@@ -43,12 +29,12 @@ class GeneratedQuestionDraft {
 
   factory GeneratedQuestionDraft.fromJson(Map<String, dynamic> json) {
     return GeneratedQuestionDraft(
-      examId: json['exam_id'] as int,
-      questionText: json['question_text'] as String,
-      questionType: json['question_type'] as String,
-      marks: json['marks'] as int,
-      difficulty: json['difficulty'] as String,
-      bloomTaxonomy: json['bloom_taxonomy'] as String,
+      examId: (json['exam_id'] as num?)?.toInt() ?? 0,
+      questionText: json['question_text'] as String? ?? '',
+      questionType: json['question_type'] as String? ?? 'short_answer',
+      marks: (json['marks'] as num?)?.toInt() ?? 1,
+      difficulty: json['difficulty'] as String? ?? 'medium',
+      bloomTaxonomy: json['bloom_taxonomy'] as String? ?? 'understand',
       topicTag: json['topic_tag'] as String?,
       options: (json['options'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -63,7 +49,7 @@ class GeneratedQuestionDraft {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
-      isAiGenerated: json['is_ai_generated'] == true,
+      isAiGenerated: json['is_ai_generated'] == true || json['is_ai_generated'] == 1,
     );
   }
 }

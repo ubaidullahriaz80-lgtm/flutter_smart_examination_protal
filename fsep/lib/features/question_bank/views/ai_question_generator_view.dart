@@ -210,6 +210,11 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
           title: const Text('AI Question Generator'),
         ),
         body: BlocListener<AiGeneratorBloc, AiGeneratorState>(
+          listenWhen: (previous, current) {
+            return (previous is! AiGeneratorResultReady && current is AiGeneratorResultReady) ||
+                (previous is! AiGeneratorJobStarted && current is AiGeneratorJobStarted) ||
+                (current is AiGeneratorError);
+          },
           listener: (context, state) {
             if (state is AiGeneratorResultReady) {
               ScaffoldMessenger.of(context)

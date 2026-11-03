@@ -122,7 +122,7 @@ class _UserListViewState extends State<UserListView> {
           ),
           IconButton(
             tooltip: 'Add User',
-            icon: const Icon(Icons.person_add_alt_1),
+            icon: const Icon(Icons.person_add_alt_1_outlined),
             onPressed: _openCreateForm,
           ),
         ],
@@ -147,10 +147,30 @@ class _UserListViewState extends State<UserListView> {
           final users = snapshot.data ?? [];
 
           if (users.isEmpty) {
-            return const Center(
-              child: Text(
-                'No users found.',
-                style: TextStyle(fontSize: 16),
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.people_outline,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No users found.',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _openCreateForm,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add First User'),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -191,17 +211,24 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               CircleAvatar(
+                radius: 22,
+                backgroundColor: colorScheme.primaryContainer,
+                foregroundColor: colorScheme.onPrimaryContainer,
                 child: Text(
                   user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
               const SizedBox(width: 16),
@@ -211,21 +238,23 @@ class _UserCard extends StatelessWidget {
                   children: [
                     Text(
                       user.name,
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       user.email,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Chip(
+                      avatar: const Icon(Icons.badge_outlined, size: 14),
                       label: Text(
                         user.role.displayName,
-                        style: const TextStyle(fontSize: 11),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -233,11 +262,14 @@ class _UserCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Delete',
-                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete User',
+                icon: Icon(Icons.delete_outline, color: colorScheme.error),
                 onPressed: onDelete,
               ),
-              const Icon(Icons.chevron_right),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
             ],
           ),
         ),
@@ -259,9 +291,10 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline,
               size: 48,
+              color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 12),
             const Text(

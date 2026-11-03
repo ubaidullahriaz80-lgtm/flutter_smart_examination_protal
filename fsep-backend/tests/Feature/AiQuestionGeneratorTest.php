@@ -3,21 +3,26 @@
 namespace Tests\Feature;
 
 use App\Models\Exam;
+use App\Models\AiQuestionGenerationJob;
+use App\Jobs\ProcessAiTopicGenerationJob;
+use App\Services\AiQuestionGeneratorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\Concerns\CreatesTestUsers;
 use Tests\TestCase;
 
 /**
- * Novelty #2 — AI Question Generator. The real Gemini call is faked here
+ * Novelty #2 — AI Question Generator. The real Groq call is faked here
  * (Http::fake) — this is standard practice for an automated test suite
  * that must run offline/in CI without spending real API quota; the real
- * live Gemini integration itself continues to be verified by hand
+ * live Groq integration itself continues to be verified by hand
  * against the actual API, exactly as done throughout this project's
  * development. This test verifies FSEP's own wiring around that call:
  * validation, distribution across exams/types, and that
  * is_ai_generated/review_status are preserved through save — not
- * Gemini's own behavior.
+ * Groq's own behavior.
  */
 class AiQuestionGeneratorTest extends TestCase
 {
@@ -27,10 +32,10 @@ class AiQuestionGeneratorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.gemini.key' => 'fake-test-key', 'services.gemini.model' => 'gemini-test']);
+        config(['services.groq.key' => 'fake-test-key', 'services.groq.model' => 'openai/gpt-oss-120b']);
     }
 
-    private function fakeGeminiResponse(int $count = 1): void
+    private function fakeGroqResponse(int $count = 1): void
     {
         $questions = [];
         for ($i = 0; $i < $count; $i++) {
@@ -46,9 +51,9 @@ class AiQuestionGeneratorTest extends TestCase
         }
 
         Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [
-                    ['content' => ['parts' => [['text' => json_encode(['questions' => $questions])]]]],
+            'api.groq.com/openai/v1/chat/completions' => Http::response([
+                'choices' => [
+                    ['message' => ['content' => json_encode(['questions' => $questions])]],
                 ],
             ]),
         ]);
@@ -56,6 +61,7 @@ class AiQuestionGeneratorTest extends TestCase
 
     public function test_generated_questions_preserve_ai_flag_and_pending_review_after_save(): void
     {
+        Queue::fake();
         [$examiner, $token] = $this->makeUserWithToken('examiner');
         $exam = Exam::create([
             'created_by' => $examiner->id,
@@ -66,7 +72,7 @@ class AiQuestionGeneratorTest extends TestCase
             'status' => 'draft',
         ]);
         $headers = $this->authHeaders($token);
-        $this->fakeGeminiResponse(1);
+        $this->fakeGroqResponse(1);
 
         $generate = $this->postJson('/api/questions/generate', [
             'exam_id' => $exam->id,
@@ -78,10 +84,30 @@ class AiQuestionGeneratorTest extends TestCase
             'marks' => 5,
         ], $headers);
 
-        $generate->assertStatus(200)
-            ->assertJson(['questions' => [['is_ai_generated' => true, 'exam_id' => $exam->id]]]);
+        $generate->assertStatus(202)
+            ->assertJson(['status' => 'GENERATING']);
 
-        $draft = $generate->json('questions.0');
+        $generationJob = AiQuestionGenerationJob::findOrFail($generate->json('job_id'));
+        (new ProcessAiTopicGenerationJob($generationJob->id))
+            ->handle(app(AiQuestionGeneratorService::class));
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $body = $request->data();
+
+            return $request->url() === 'https://api.groq.com/openai/v1/chat/completions'
+                && $request->hasHeader('Authorization', 'Bearer fake-test-key')
+                && ($body['model'] ?? null) === 'openai/gpt-oss-120b'
+                && ($body['response_format']['type'] ?? null) === 'json_schema'
+                && ($body['response_format']['json_schema']['strict'] ?? false) === true;
+        });
+
+        $poll = $this->getJson('/api/questions/generate/job/' . $generationJob->id, $headers);
+        $poll->assertOk()->assertJson([
+            'status' => 'COMPLETED',
+            'questions' => [['is_ai_generated' => true, 'exam_id' => $exam->id]],
+        ]);
+
+        $draft = $poll->json('questions.0');
         $save = $this->postJson('/api/questions', array_merge($draft, ['exam_id' => $exam->id]), $headers);
 
         $save->assertStatus(201)->assertJson([
@@ -91,6 +117,7 @@ class AiQuestionGeneratorTest extends TestCase
 
     public function test_multiple_exams_and_types_are_distributed_evenly(): void
     {
+        Queue::fake();
         [$examiner, $token] = $this->makeUserWithToken('examiner');
         $examA = Exam::create([
             'created_by' => $examiner->id, 'title' => 'Exam A',
@@ -101,10 +128,10 @@ class AiQuestionGeneratorTest extends TestCase
             'duration_minutes' => 60, 'total_marks' => 5, 'negative_marking_weight' => 0, 'status' => 'draft',
         ]);
         // Only one question_type is selected, so the controller makes a
-        // single Gemini call for all 4 requested questions — the fake
+        // single Groq call for all 4 requested questions — the fake
         // must return all 4, not split per exam (distribution across
         // exams happens after generation, purely in FSEP's own code).
-        $this->fakeGeminiResponse(4);
+        $this->fakeGroqResponse(4);
 
         $response = $this->postJson('/api/questions/generate', [
             'exam_ids' => [$examA->id, $examB->id],
@@ -116,8 +143,12 @@ class AiQuestionGeneratorTest extends TestCase
             'marks' => 5,
         ], $this->authHeaders($token));
 
-        $response->assertStatus(200);
-        $examIds = collect($response->json('questions'))->pluck('exam_id');
+        $response->assertStatus(202);
+        $generationJob = AiQuestionGenerationJob::findOrFail($response->json('job_id'));
+        (new ProcessAiTopicGenerationJob($generationJob->id))
+            ->handle(app(AiQuestionGeneratorService::class));
+
+        $examIds = collect($generationJob->fresh()->generated_questions)->pluck('exam_id');
         $this->assertSame(2, $examIds->filter(fn ($id) => $id === $examA->id)->count());
         $this->assertSame(2, $examIds->filter(fn ($id) => $id === $examB->id)->count());
     }

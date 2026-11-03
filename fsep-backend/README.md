@@ -22,7 +22,7 @@ FSEP is an online examination platform:
   1. **Behavioral Cheating Detection** — records focus-loss/navigation
      events during an exam and computes a simple suspicion score.
   2. **AI Question Generator** — generates candidate exam questions using
-     **Google Gemini**, subject to examiner review/approval before use.
+    **Groq**, subject to examiner review/approval before use.
   3. **Learning Gap Detection** — analyzes a candidate's graded answers
      and reports weak topics.
 
@@ -46,7 +46,7 @@ Verified against this project's actual configuration:
 | Dart SDK | ^3.11.5 |
 | Chrome | Required for the recommended Flutter Web demo target |
 | Node.js | **Not required** — this project has no frontend build step |
-| Gemini API key | Required only for the AI Question Generator feature |
+| Groq API key | Required only for the AI Question Generator feature |
 
 ## 3. Backend Setup
 
@@ -59,7 +59,7 @@ php artisan key:generate
 ```
 
 Edit `.env` and configure the database (see [Database Setup](#4-database-setup))
-and, optionally, the Gemini key (see [Gemini AI Setup](#5-gemini-ai-setup)).
+and, optionally, the Groq key (see [Groq AI Setup](#5-groq-ai-setup)).
 
 Then:
 
@@ -67,6 +67,17 @@ Then:
 php artisan migrate --seed
 php artisan serve --no-reload
 ```
+
+In a **second terminal**, start the database queue worker so background
+question generation jobs can run:
+
+```bash
+php artisan queue:work --timeout=300 --tries=1
+```
+
+Keep the worker running while using the AI Question Generator. The app
+returns a job ID immediately, shows a progress indicator, polls for the
+result, and displays the generated drafts when the job completes.
 
 The backend will be available at:
 
@@ -107,21 +118,21 @@ which seeds the demo accounts, a demo exam, and a completed graded
 session (see [Demo Accounts](#7-demo-accounts)). The seeder is safe to
 run more than once — it will not create duplicates or reset existing data.
 
-## 5. Gemini AI Setup
+## 5. Groq AI Setup
 
-The **AI Question Generator** novelty calls the Google Gemini API
+The **AI Question Generator** novelty calls the Groq API
 server-side. It requires an API key that is **not included** in this
 submission.
 
 In `.env`, set:
 
 ```
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
-GEMINI_MODEL=gemini-3.6-flash
+GROQ_API_KEY=YOUR_GROQ_API_KEY_HERE
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
-- Get a key from [Google AI Studio](https://aistudio.google.com/).
-- The key is read server-side only (`config('services.gemini.key')`,
+- Get a key from [Groq Console](https://console.groq.com/keys).
+- The key is read server-side only (`config('services.groq.key')`,
   `app/Services/AiQuestionGeneratorService.php`) — it is never sent to
   the Flutter app.
 - **Without a valid key, question generation will not work.** The
@@ -229,7 +240,7 @@ Results and Learning Gaps have real data to show immediately.
 **C. Examiner** (`testteacher@fsep.test`)
 1. Log in → Examiner Dashboard → Question Bank.
 2. Open the AI Question Generator → enter a topic → Generate (requires a
-   configured `GEMINI_API_KEY`) → review and save a generated question.
+  configured `GROQ_API_KEY`) → review and save a generated question.
 3. Open Manual Grading → look up the seeded candidate's session/question
    (the seeded Essay answer is already pending review) → enter marks →
    Save.
@@ -249,13 +260,15 @@ Normal / Suspicious / Highly Suspicious. This does **not** use a camera,
 does not do real-time streaming, and does not detect anything beyond
 these focus/navigation signals.
 
-**AI Question Generator.** Uses the **Google Gemini** API
-(`generateContent`, structured JSON output) to generate MCQ, True/False,
+**AI Question Generator.** Uses the **Groq Chat Completions** API
+(strict JSON-schema output) to generate MCQ, True/False,
 Short Answer, or Essay questions from an examiner-supplied topic and
-parameters. Every generated question is saved with `review_status =
-pending` and `is_ai_generated = true`, and only becomes usable after an
-examiner explicitly approves it. Requires `GEMINI_API_KEY` (see
-[Gemini AI Setup](#5-gemini-ai-setup)).
+parameters. Topic-generated questions are returned as drafts first;
+explicitly saving a draft marks it `is_ai_generated = true` and
+`review_status = pending`, and it only becomes usable after an examiner
+approves it. Document-based generation is queued and creates questions
+pending review. Requires `GROQ_API_KEY` (see
+[Groq AI Setup](#5-groq-ai-setup)).
 
 **Learning Gap Detection.** After a candidate's answers are graded, this
 analyzes their own performance (never another candidate's) grouped by
@@ -265,7 +278,7 @@ graded answer data — nothing is precomputed or faked.
 
 ## 10. Known Limitations
 
-- **AI generation requires a valid Gemini API key.** Without one, the
+- **AI generation requires a valid Groq API key.** Without one, the
   rest of the platform works normally, but no new AI questions can be
   generated.
 - **Essay and Code Snippet answers require manual grading** by an
@@ -314,7 +327,7 @@ above — this is almost always the hardcoded LAN IP in `app_config.dart`
 not matching your machine, or the backend not running.
 
 **"The AI provider is not configured"**
-`GEMINI_API_KEY` is missing/empty in the backend's `.env`. Add a real key
+`GROQ_API_KEY` is missing/empty in the backend's `.env`. Add a real key
 and restart `php artisan serve`.
 
 **CORS / cross-origin errors in the browser console**
@@ -345,7 +358,7 @@ seeded passwords are `password123`. If login fails, confirm
 - `node_modules/` — not applicable, this project has none
 - `.git/` — not applicable, this project is not a git repository
 - `fsep-backend/.env` — contains your real `APP_KEY`, DB credentials,
-  and Gemini key; ship only `.env.example`
+  and Groq key; ship only `.env.example`
 
 **Firebase:** this project does not use Firebase/FCM — there is no
 Firebase configuration file anywhere in the Flutter project, so nothing

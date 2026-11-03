@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -59,6 +62,8 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   String _bloomLevel = _bloomLevels[1]; // understand
 
   late final AiGeneratorBloc _bloc;
+  Timer? _jobPollTimer;
+  int _jobPollAttempts = 0;
 
   void _applyConfiguration(ExamQuestionConfigurationModel config) {
     setState(() {
@@ -77,11 +82,19 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
   void initState() {
     super.initState();
     _bloc = AiGeneratorBloc(repository: QuestionBankRepository());
-    _examsFuture = _examRepository.getExams();
+    _examsFuture = _examRepository.getExams().then((exams) {
+      if (mounted && _selectedExams.isEmpty && exams.isNotEmpty) {
+        setState(() {
+          _selectedExams.add(exams.first);
+        });
+      }
+      return exams;
+    });
   }
 
   @override
   void dispose() {
+    _jobPollTimer?.cancel();
     _bloc.close();
     _topicController.dispose();
     _countController.dispose();
@@ -115,6 +128,7 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
 
   void _generate(BuildContext context) {
     FocusScope.of(context).unfocus();
+    _jobPollTimer?.cancel();
 
     if (_source == GenerationSource.topic) {
       if (!_formKey.currentState!.validate()) return;
@@ -146,28 +160,40 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
       return;
     }
 
-    if (_source == GenerationSource.topic) {
-      _bloc.add(AiGeneratorGenerateFromTopic(
-        examIds: [for (final exam in _selectedExams) exam.id],
-        topic: _topicController.text.trim(),
-        questionTypes: _selectedQuestionTypes.toList(),
-        difficulty: _difficulty,
-        bloomTaxonomy: _bloomLevel,
-        count: int.tryParse(_countController.text) ?? 3,
-        marks: int.tryParse(_marksController.text) ?? 5,
-      ));
-    } else {
-      final paths = _selectedFiles.map((f) => f.path).whereType<String>().toList();
-      _bloc.add(AiGeneratorUploadDocuments(
-        filePaths: paths,
-        examIds: [for (final exam in _selectedExams) exam.id],
-        questionTypes: _selectedQuestionTypes.toList(),
-        difficulty: _difficulty,
-        bloomTaxonomy: _bloomLevel,
-        count: int.tryParse(_countController.text) ?? 3,
-        marks: int.tryParse(_marksController.text) ?? 5,
-      ));
-    }
+    final source = _source;
+    final topic = _topicController.text.trim();
+    final examIds = [for (final exam in _selectedExams) exam.id];
+    final questionTypes = _selectedQuestionTypes.toList();
+    final difficulty = _difficulty;
+    final bloomLevel = _bloomLevel;
+    final count = int.tryParse(_countController.text) ?? 3;
+    final marks = int.tryParse(_marksController.text) ?? 5;
+    final filePaths = _selectedFiles.map((f) => f.path).whereType<String>().toList();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (source == GenerationSource.topic) {
+        _bloc.add(AiGeneratorGenerateFromTopic(
+          examIds: examIds,
+          topic: topic,
+          questionTypes: questionTypes,
+          difficulty: difficulty,
+          bloomTaxonomy: bloomLevel,
+          count: count,
+          marks: marks,
+        ));
+      } else {
+        _bloc.add(AiGeneratorUploadDocuments(
+          filePaths: filePaths,
+          examIds: examIds,
+          questionTypes: questionTypes,
+          difficulty: difficulty,
+          bloomTaxonomy: bloomLevel,
+          count: count,
+          marks: marks,
+        ));
+      }
+    });
   }
 
   void _removeExam(ExamModel exam) {
@@ -218,11 +244,14 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
         body: BlocListener<AiGeneratorBloc, AiGeneratorState>(
           listenWhen: (previous, current) {
             return (previous is! AiGeneratorResultReady && current is AiGeneratorResultReady) ||
-                (previous is! AiGeneratorJobStarted && current is AiGeneratorJobStarted) ||
+              (current is AiGeneratorJobStarted &&
+                (previous is! AiGeneratorJobStarted || previous.status != current.status)) ||
                 (current is AiGeneratorError);
           },
           listener: (context, state) {
             if (state is AiGeneratorResultReady) {
+              _jobPollTimer?.cancel();
+              final scrollable = Scrollable.maybeOf(context);
               ScaffoldMessenger.of(context)
                 ..hideCurrentSnackBar()
                 ..showSnackBar(
@@ -234,23 +263,57 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                     duration: const Duration(seconds: 4),
                   ),
                 );
-              Future.delayed(const Duration(milliseconds: 200), () {
-                if (_resultsKey.currentContext != null) {
-                  Scrollable.ensureVisible(
-                    _resultsKey.currentContext!,
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final targetContext = _resultsKey.currentContext;
+                if (targetContext != null) {
+                  final renderObject = targetContext.findRenderObject();
+                  if (renderObject is RenderBox && renderObject.hasSize) {
+                    Scrollable.ensureVisible(
+                      targetContext,
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                } else if (scrollable != null && scrollable.position.hasContentDimensions) {
+                  scrollable.position.animateTo(
+                    math.min(
+                      scrollable.position.maxScrollExtent,
+                      scrollable.position.pixels + 500,
+                    ),
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.easeOut,
                   );
                 }
               });
             } else if (state is AiGeneratorJobStarted) {
+              _jobPollTimer?.cancel();
+              if (state.status != 'REVIEW_PENDING' && state.status != 'COMPLETED') {
+                _jobPollAttempts = 0;
+                _jobPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+                  if (mounted) {
+                    _jobPollAttempts++;
+                    if (_jobPollAttempts > 100) {
+                      _jobPollTimer?.cancel();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Generation is taking too long. Check that the backend queue worker is running, then refresh the job status.'),
+                        ),
+                      );
+                      return;
+                    }
+                    _bloc.add(AiGeneratorPollJobStatus(state.jobId));
+                  }
+                });
+              }
               _selectedFiles.clear();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Documents uploaded. Questions are being generated...'),
+                  content: Text('Generation started. Status updates automatically...'),
                 ),
               );
             } else if (state is AiGeneratorError) {
+              _jobPollTimer?.cancel();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(state.message)),
               );
@@ -267,101 +330,135 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
                         maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.6,
-                        minWidth: context.isMobile ? double.infinity : 600,
+                        minWidth: context.isMobile ? 0 : 600,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: _buildFormContent(context, state),
+                          KeyedSubtree(
+                            key: const ValueKey('ai_generator_form_card'),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: _buildFormContent(context, state),
+                              ),
                             ),
                           ),
-                          if (state is AiGeneratorLoading) ...[
-                            const SizedBox(height: 16),
-                            const Card(
+                          if (state is AiGeneratorLoading)
+                            const KeyedSubtree(
+                              key: ValueKey('ai_generator_loading_card'),
                               child: Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Column(
-                                  children: [
-                                    LinearProgressIndicator(),
-                                    SizedBox(height: 16),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                padding: EdgeInsets.only(top: 16),
+                                child: Card(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(20),
+                                    child: Column(
                                       children: [
-                                        Icon(Icons.auto_awesome, color: Colors.teal),
-                                        SizedBox(width: 8),
+                                        LinearProgressIndicator(),
+                                        SizedBox(height: 16),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.auto_awesome, color: Colors.teal),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Generating questions with Groq AI...',
+                                              style: TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: 6),
                                         Text(
-                                          'Generating questions with Google Gemini AI...',
-                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                          'This usually takes 5–15 seconds. Please wait.',
+                                          style: TextStyle(fontSize: 12, color: Colors.grey),
                                         ),
                                       ],
                                     ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      'This usually takes 5–15 seconds. Please wait.',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ],
-                          if (state is AiGeneratorResultReady) ...[
-                            const SizedBox(height: 24),
-                            Container(
-                              key: _resultsKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          if (state is AiGeneratorResultReady)
+                            KeyedSubtree(
+                              key: const ValueKey('ai_generator_results_section'),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 24),
+                                child: Container(
+                                  key: _resultsKey,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      Text(
-                                        'Generated Questions (${state.drafts.length})',
-                                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Generated Questions (${state.drafts.length})',
+                                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                                          ),
+                                          Chip(
+                                            avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
+                                            label: const Text('AI Ready'),
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                        ],
                                       ),
-                                      Chip(
-                                        avatar: const Icon(Icons.auto_awesome, size: 16, color: Colors.teal),
-                                        label: const Text('AI Ready'),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
+                                      const SizedBox(height: 12),
+                                      for (var i = 0; i < state.drafts.length; i++) ...[
+                                        _GeneratedQuestionCard(
+                                          key: ValueKey('draft_card_${state.drafts[i].hashCode}_$i'),
+                                          index: i,
+                                          draft: state.drafts[i],
+                                          saving: state.savingIndexes.contains(i),
+                                          saved: state.savedIndexes.contains(i),
+                                          onSave: () {
+                                            final bloc = context.read<AiGeneratorBloc>();
+                                            final draft = state.drafts[i];
+                                            final idx = i;
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              bloc.add(AiGeneratorSaveDraft(draft, idx));
+                                            });
+                                          },
+                                          onDiscard: () {
+                                            final bloc = context.read<AiGeneratorBloc>();
+                                            final idx = i;
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              bloc.add(AiGeneratorDiscardDraft(idx));
+                                            });
+                                          },
+                                        ),
+                                        SizedBox(key: ValueKey('draft_gap_${state.drafts[i].hashCode}_$i'), height: 12),
+                                      ],
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
-                                  for (var i = 0; i < state.drafts.length; i++) ...[
-                                    _GeneratedQuestionCard(
-                                      key: ValueKey('draft_card_$i'),
-                                      index: i,
-                                      draft: state.drafts[i],
-                                      saving: state.savingIndexes.contains(i),
-                                      saved: state.savedIndexes.contains(i),
-                                      onSave: () => context.read<AiGeneratorBloc>().add(AiGeneratorSaveDraft(state.drafts[i], i)),
-                                      onDiscard: () => context.read<AiGeneratorBloc>().add(AiGeneratorDiscardDraft(i)),
-                                    ),
-                                    SizedBox(key: ValueKey('draft_gap_$i'), height: 12),
-                                  ],
-                                ],
+                                ),
                               ),
                             ),
-                          ],
-                          if (state is AiGeneratorJobStarted) ...[
-                            const SizedBox(height: 24),
-                            _ActiveJobCard(
-                              jobId: state.jobId,
-                              status: state.status,
-                              onRefresh: () => context.read<AiGeneratorBloc>().add(AiGeneratorPollJobStatus(state.jobId)),
-                              onViewResults: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        AiQuestionReviewView(jobId: state.jobId),
-                                  ),
-                                );
-                              },
+                          if (state is AiGeneratorJobStarted)
+                            KeyedSubtree(
+                              key: ValueKey('ai_generator_job_${state.jobId}'),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 24),
+                                child: _ActiveJobCard(
+                                  jobId: state.jobId,
+                                  status: state.status,
+                                  onRefresh: () {
+                                    final bloc = context.read<AiGeneratorBloc>();
+                                    final jobId = state.jobId;
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      bloc.add(AiGeneratorPollJobStatus(jobId));
+                                    });
+                                  },
+                                  onViewResults: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            AiQuestionReviewView(jobId: state.jobId),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
-                          ],
                         ],
                       ),
                     ),
@@ -436,13 +533,6 @@ class _AiQuestionGeneratorViewState extends State<AiQuestionGeneratorView> {
           future: _examsFuture,
           builder: (context, snapshot) {
             final exams = snapshot.data ?? [];
-            if (_selectedExams.isEmpty && exams.isNotEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted && _selectedExams.isEmpty) {
-                  setState(() => _selectedExams.add(exams.first));
-                }
-              });
-            }
             return OutlinedButton.icon(
               onPressed: exams.isEmpty
                   ? null
@@ -671,6 +761,12 @@ class _ActiveJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (!isReady && !isFailed) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+              const Text('Generating questions in the background. This page checks for results automatically.'),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
@@ -693,14 +789,14 @@ class _ActiveJobCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (!isReady && !isFailed)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 12),
-                    child: SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
+                        const Padding(
+                          padding: EdgeInsets.only(right: 12),
+                          child: SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
                 TextButton.icon(
                   onPressed: onRefresh,
                   icon: const Icon(Icons.refresh, size: 18),
@@ -816,6 +912,9 @@ class _GeneratedQuestionCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                  ),
                   onPressed: saved ? null : (saving ? null : onSave),
                   icon: saving
                       ? const SizedBox(

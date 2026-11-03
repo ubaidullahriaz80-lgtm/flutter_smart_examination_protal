@@ -12,6 +12,7 @@ class AiQuestionGenerationJob extends Model
         'examiner_id',
         'document_name',
         'chunks',
+        'generated_questions',
         'params',
         'exam_ids',
         'status',
@@ -28,6 +29,7 @@ class AiQuestionGenerationJob extends Model
 
     protected $casts = [
         'chunks' => 'array',
+        'generated_questions' => 'array',
         'params' => 'array',
         'exam_ids' => 'array',
         'parsing_at' => 'datetime',

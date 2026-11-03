@@ -60,52 +60,48 @@ class _CandidateDashboardViewState extends State<CandidateDashboardView> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return RoleDashboardScaffold(
-      title: 'Candidate',
-      user: widget.user,
-      actions: [
-        FutureBuilder<int>(
+  // ── Navigation destinations (sidebar + in-page shortcuts) ──────────────────
+
+  DashboardNavItem _examsItem() => DashboardNavItem(
+        icon: Icons.assignment_outlined,
+        label: 'Exams',
+        description: 'View and take your available exams',
+        builder: (_) => const ExamListView(),
+      );
+
+  DashboardNavItem _gapsItem() => DashboardNavItem(
+        icon: Icons.insights_outlined,
+        label: 'Learning Gaps',
+        description: 'Review weak topics and your roadmap',
+        builder: (_) => const LearningGapsView(),
+      );
+
+  DashboardNavItem _syncItem() => DashboardNavItem(
+        icon: Icons.sync_problem,
+        label: 'Sync Recovery',
+        description: 'Resolve answers that failed to sync',
+        builder: (_) => const SyncRecoveryView(),
+        onReturn: _refreshFailedSyncCount,
+        badge: FutureBuilder<int>(
           future: _failedSyncCountFuture,
           builder: (context, snapshot) {
             final count = snapshot.data ?? 0;
-            return IconButton(
-              tooltip: 'Sync Recovery',
-              icon: count > 0
-                  ? Badge(
-                      label: Text('$count'),
-                      child: const Icon(Icons.sync_problem),
-                    )
-                  : const Icon(Icons.sync_problem),
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SyncRecoveryView()),
-                );
-                _refreshFailedSyncCount();
-              },
-            );
+            if (count == 0) return const SizedBox.shrink();
+            return DashboardCountBadge(count);
           },
         ),
-        IconButton(
-          tooltip: 'Exams',
-          icon: const Icon(Icons.assignment_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ExamListView()),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Learning Gaps',
-          icon: const Icon(Icons.insights_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LearningGapsView()),
-            );
-          },
-        ),
-      ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final examsItem = _examsItem();
+    final gapsItem = _gapsItem();
+
+    return RoleDashboardScaffold(
+      title: 'Candidate',
+      user: widget.user,
+      profileFuture: _profileFuture,
+      navItems: [examsItem, gapsItem, _syncItem()],
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -113,101 +109,210 @@ class _CandidateDashboardViewState extends State<CandidateDashboardView> {
             future: _profileFuture,
             builder: (context, snapshot) {
               final profile = snapshot.data;
-              return DashboardProfileCard(
+              return DashboardWelcomeBanner(
                 name: profile?.name ?? 'Candidate',
                 email: profile?.email,
                 roleLabel: widget.user.role.displayName,
+                message: 'Track your exams and learning progress in one place.',
               );
             },
           ),
           const SizedBox(height: 20),
-          FutureBuilder<List<ExamModel>>(
-            future: _examsFuture,
-            builder: (context, examSnapshot) {
-              final exams = examSnapshot.data ?? [];
-              return FutureBuilder<LearningGapReport>(
-                future: _gapsFuture,
-                builder: (context, gapSnapshot) {
-                  final report = gapSnapshot.data;
-                  final stats = <DashboardStat>[
+          DashboardTabs(
+            tabs: [
+              DashboardTab(
+                label: 'Overview',
+                icon: Icons.dashboard_outlined,
+                child: _buildOverview(examsItem, gapsItem),
+              ),
+              DashboardTab(
+                label: 'Exams',
+                icon: Icons.assignment_outlined,
+                child: _buildExams(),
+              ),
+              DashboardTab(
+                label: 'Learning Gaps',
+                icon: Icons.insights_outlined,
+                child: _buildGaps(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+
+  Widget _buildOverview(DashboardNavItem examsItem, DashboardNavItem gapsItem) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FutureBuilder<List<ExamModel>>(
+          future: _examsFuture,
+          builder: (context, examSnapshot) {
+            final exams = examSnapshot.data ?? [];
+            return FutureBuilder<LearningGapReport>(
+              future: _gapsFuture,
+              builder: (context, gapSnapshot) {
+                final report = gapSnapshot.data;
+                return DashboardStatsRow(
+                  stats: [
                     if (examSnapshot.connectionState == ConnectionState.done)
-                      DashboardStat('Available Exams', '${exams.length}'),
+                      DashboardStat(
+                        'Available Exams',
+                        '${exams.length}',
+                        icon: Icons.assignment_outlined,
+                        color: DashboardColors.emerald,
+                      ),
                     if (report != null) ...[
                       DashboardStat(
                         'Topics Analyzed',
                         '${report.topicsAnalyzed}',
+                        icon: Icons.analytics_outlined,
+                        color: DashboardColors.blue,
                       ),
                       DashboardStat(
                         'Weak Topics',
                         '${report.gaps.length}',
+                        icon: Icons.trending_down,
+                        color: DashboardColors.orange,
+                      ),
+                      DashboardStat(
+                        'Questions Attempted',
+                        '${report.questionsAttempted}',
+                        icon: Icons.help_outline,
+                        color: DashboardColors.violet,
                       ),
                     ],
-                  ];
-                  if (stats.isEmpty) return const SizedBox.shrink();
-                  return DashboardStatsRow(stats: stats);
-                },
-              );
-            },
-          ),
-          const DashboardSectionTitle('Available Exams'),
-          FutureBuilder<List<ExamModel>>(
-            future: _examsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: CircularProgressIndicator(),
-                  ),
+                  ],
                 );
-              }
-              if (snapshot.hasError) {
-                return const Text('Unable to load exams.');
-              }
-              final exams = snapshot.data ?? [];
-              if (exams.isEmpty) {
-                return const Text('No exams are available yet.');
-              }
-              return Column(
-                children: [
-                  for (final exam in exams.take(3)) _ExamPreviewCard(exam: exam),
-                ],
-              );
-            },
+              },
+            );
+          },
+        ),
+        const SizedBox(height: 22),
+        DashboardTwoColumn(
+          left: DashboardPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DashboardPanelHeader(
+                  title: 'Available Exams',
+                  subtitle: 'Pick up where you left off',
+                  actionLabel: 'View all',
+                  onAction: () => examsItem.open(context),
+                ),
+                _examList(limit: 3),
+              ],
+            ),
           ),
-          const DashboardSectionTitle('Learning Gap Summary'),
-          FutureBuilder<LearningGapReport>(
-            future: _gapsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-              }
-              if (snapshot.hasError) {
-                return const Text('Unable to load learning gaps.');
-              }
-              final report = snapshot.data;
-              if (report == null || report.gaps.isEmpty) {
-                return const Text(
-                  'No weak topics identified yet — keep taking exams to '
-                  'build up your performance history.',
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final gap in report.gaps.take(3))
-                    _GapRow(gap: gap),
-                ],
-              );
-            },
+          right: DashboardPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DashboardPanelHeader(
+                  title: 'Learning Gap Summary',
+                  subtitle: 'Topics that need more attention',
+                  actionLabel: 'View all',
+                  onAction: () => gapsItem.open(context),
+                ),
+                _gapList(limit: 3),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExams() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const DashboardSectionTitle(
+          'Available Exams',
+          subtitle: 'Exams you can start right now',
+          padding: EdgeInsets.only(bottom: 14),
+        ),
+        _examList(),
+      ],
+    );
+  }
+
+  Widget _buildGaps() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const DashboardSectionTitle(
+          'Learning Gap Summary',
+          subtitle: 'Topics where your performance is below target',
+          padding: EdgeInsets.only(bottom: 14),
+        ),
+        _gapList(),
+      ],
+    );
+  }
+
+  // ── Data-bound lists ───────────────────────────────────────────────────────
+
+  Widget _examList({int? limit}) {
+    return FutureBuilder<List<ExamModel>>(
+      future: _examsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const DashboardLoading();
+        }
+        if (snapshot.hasError) {
+          return const DashboardMessage(
+            icon: Icons.error_outline,
+            message: 'Unable to load exams.',
+            isError: true,
+          );
+        }
+        final exams = snapshot.data ?? [];
+        if (exams.isEmpty) {
+          return const DashboardMessage(
+            icon: Icons.inbox_outlined,
+            message: 'No exams are available yet.',
+          );
+        }
+        final shown = limit == null ? exams : exams.take(limit).toList();
+        return Column(
+          children: [for (final exam in shown) _ExamPreviewCard(exam: exam)],
+        );
+      },
+    );
+  }
+
+  Widget _gapList({int? limit}) {
+    return FutureBuilder<LearningGapReport>(
+      future: _gapsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const DashboardLoading();
+        }
+        if (snapshot.hasError) {
+          return const DashboardMessage(
+            icon: Icons.error_outline,
+            message: 'Unable to load learning gaps.',
+            isError: true,
+          );
+        }
+        final report = snapshot.data;
+        if (report == null || report.gaps.isEmpty) {
+          return const DashboardMessage(
+            icon: Icons.emoji_events_outlined,
+            message: 'No weak topics identified yet — keep taking exams to '
+                'build up your performance history.',
+          );
+        }
+        final gaps = limit == null ? report.gaps : report.gaps.take(limit);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (final gap in gaps) _GapRow(gap: gap)],
+        );
+      },
     );
   }
 }
@@ -219,61 +324,42 @@ class _ExamPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.05)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ExamDeliveryView(examId: exam.id),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(Icons.assignment_outlined, color: theme.colorScheme.primary),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        exam.title,
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${exam.durationMinutes} minutes • ${exam.questions.length} questions',
-                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: Colors.grey),
-              ],
-            ),
+    return DashboardListCard(
+      icon: Icons.assignment_outlined,
+      color: DashboardColors.blue,
+      title: exam.title,
+      chips: [
+        DashboardMetaChip(
+          icon: Icons.timer_outlined,
+          label: '${exam.durationMinutes} min',
+        ),
+        DashboardMetaChip(
+          icon: Icons.help_outline,
+          label: '${exam.questions.length} questions',
+        ),
+      ],
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: DashboardColors.emerald,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Start',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ExamDeliveryView(examId: exam.id),
+          ),
+        );
+      },
     );
   }
 }
@@ -283,25 +369,63 @@ class _GapRow extends StatelessWidget {
 
   final LearningGapModel gap;
 
-  Color _severityColor(BuildContext context) => switch (gap.severity) {
-        'high' => Theme.of(context).colorScheme.error,
-        _ => Colors.orange,
+  Color get _severityColor => switch (gap.severity) {
+        'high' => DashboardColors.rose,
+        _ => DashboardColors.orange,
       };
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(Icons.trending_down, color: _severityColor(context)),
-        title: Text(gap.topic),
-        subtitle: Text('${gap.percentage.toStringAsFixed(1)}% performance'),
-        trailing: Chip(
-          label: Text(
-            gap.severity.toUpperCase(),
-            style: TextStyle(fontSize: 11, color: _severityColor(context)),
-          ),
-          visualDensity: VisualDensity.compact,
+    final theme = Theme.of(context);
+    final color = _severityColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DashboardPanel(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.trending_down,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    gap.topic,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DashboardPill(label: gap.severity, color: color),
+              ],
+            ),
+            const SizedBox(height: 12),
+            DashboardBarRow(
+              label: 'Performance',
+              value: gap.percentage,
+              total: 100,
+              color: color,
+              valueLabel: '${gap.percentage.toStringAsFixed(1)}%',
+              bottomPadding: 0,
+            ),
+          ],
         ),
       ),
     );

@@ -42,57 +42,46 @@ class _ExaminerDashboardViewState extends State<ExaminerDashboardView> {
     _questionsFuture = _questionBankRepository.getQuestions();
   }
 
+  late final List<DashboardNavItem> _navItems = [
+    DashboardNavItem(
+      icon: Icons.edit_calendar_outlined,
+      label: 'Exam Administration',
+      description: 'Create, edit and publish exams',
+      builder: (_) => const ExamManagementListView(),
+    ),
+    DashboardNavItem(
+      icon: Icons.quiz_outlined,
+      label: 'Question Bank',
+      description: 'Browse and manage your questions',
+      builder: (_) => const QuestionBankListView(),
+    ),
+    DashboardNavItem(
+      icon: Icons.auto_awesome,
+      label: 'AI Question Generator',
+      description: 'Generate questions with AI',
+      builder: (_) => const AiQuestionGeneratorView(),
+    ),
+    DashboardNavItem(
+      icon: Icons.bar_chart_outlined,
+      label: 'Cohort Analytics',
+      description: 'Performance across cohorts',
+      builder: (_) => const CohortAnalyticsView(),
+    ),
+    DashboardNavItem(
+      icon: Icons.visibility_outlined,
+      label: 'Live Invigilator',
+      description: 'Monitor active exam sessions',
+      builder: (_) => const LiveInvigilatorView(),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return RoleDashboardScaffold(
       title: 'Examiner',
       user: widget.user,
-      actions: [
-        IconButton(
-          tooltip: 'Exam Administration',
-          icon: const Icon(Icons.edit_calendar_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ExamManagementListView(),
-              ),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Question Bank',
-          icon: const Icon(Icons.quiz_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const QuestionBankListView(),
-              ),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Cohort Analytics',
-          icon: const Icon(Icons.bar_chart_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const CohortAnalyticsView(),
-              ),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Live Invigilator',
-          icon: const Icon(Icons.visibility_outlined),
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const LiveInvigilatorView(),
-              ),
-            );
-          },
-        ),
-      ],
+      profileFuture: _profileFuture,
+      navItems: _navItems,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -100,110 +89,203 @@ class _ExaminerDashboardViewState extends State<ExaminerDashboardView> {
             future: _profileFuture,
             builder: (context, snapshot) {
               final profile = snapshot.data;
-              return DashboardProfileCard(
+              return DashboardWelcomeBanner(
                 name: profile?.name ?? 'Examiner',
                 email: profile?.email,
                 roleLabel: widget.user.role.displayName,
+                message: 'Build exams, manage questions and monitor results.',
               );
             },
           ),
           const SizedBox(height: 20),
-          FutureBuilder<List<ExamModel>>(
-            future: _examsFuture,
-            builder: (context, examSnapshot) {
-              final exams = examSnapshot.data;
-              return FutureBuilder<List<QuestionModel>>(
-                future: _questionsFuture,
-                builder: (context, questionSnapshot) {
-                  final questions = questionSnapshot.data;
-                  final stats = <DashboardStat>[
-                    if (exams != null) ...[
-                      DashboardStat('Total Exams', '${exams.length}'),
-                      DashboardStat(
-                        'Published',
-                        '${exams.where((e) => e.status == 'published').length}',
-                      ),
-                      DashboardStat(
-                        'Draft',
-                        '${exams.where((e) => e.status == 'draft').length}',
-                      ),
-                    ],
-                    if (questions != null)
-                      DashboardStat('Total Questions', '${questions.length}'),
-                  ];
-                  if (stats.isEmpty) return const SizedBox.shrink();
-                  return DashboardStatsRow(stats: stats);
-                },
-              );
-            },
-          ),
-          const DashboardSectionTitle('Recent Exams'),
-          FutureBuilder<List<ExamModel>>(
-            future: _examsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-              }
-              if (snapshot.hasError) {
-                return const Text('Unable to load exams.');
-              }
-              final exams = snapshot.data ?? [];
-              if (exams.isEmpty) {
-                return const Text('No exams have been created yet.');
-              }
-              return Column(
-                children: [
-                  for (final exam in exams.take(3)) _ExamSummaryTile(exam: exam),
-                ],
-              );
-            },
-          ),
-          const DashboardSectionTitle('Quick Actions'),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              DashboardActionChip(
-                icon: Icons.edit_calendar_outlined,
-                label: 'Exam Administration',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ExamManagementListView(),
-                  ),
-                ),
+          DashboardTabs(
+            tabs: [
+              DashboardTab(
+                label: 'Overview',
+                icon: Icons.dashboard_outlined,
+                child: _buildOverview(),
               ),
-              DashboardActionChip(
-                icon: Icons.quiz_outlined,
-                label: 'Question Bank',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const QuestionBankListView()),
-                ),
+              DashboardTab(
+                label: 'Recent Exams',
+                icon: Icons.assignment_outlined,
+                child: _buildExams(),
               ),
-              DashboardActionChip(
-                icon: Icons.auto_awesome,
-                label: 'AI Question Generator',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AiQuestionGeneratorView(),
-                  ),
-                ),
-              ),
-              DashboardActionChip(
-                icon: Icons.bar_chart_outlined,
-                label: 'Cohort Analytics',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CohortAnalyticsView()),
-                ),
+              DashboardTab(
+                label: 'Quick Actions',
+                icon: Icons.bolt_outlined,
+                child: DashboardActionGrid(items: _navItems),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOverview() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FutureBuilder<List<ExamModel>>(
+          future: _examsFuture,
+          builder: (context, examSnapshot) {
+            final exams = examSnapshot.data;
+            return FutureBuilder<List<QuestionModel>>(
+              future: _questionsFuture,
+              builder: (context, questionSnapshot) {
+                final questions = questionSnapshot.data;
+                return DashboardStatsRow(
+                  stats: [
+                    if (exams != null) ...[
+                      DashboardStat(
+                        'Total Exams',
+                        '${exams.length}',
+                        icon: Icons.assignment_outlined,
+                        color: DashboardColors.emerald,
+                      ),
+                      DashboardStat(
+                        'Published',
+                        '${exams.where((e) => e.status == 'published').length}',
+                        icon: Icons.check_circle_outline,
+                        color: DashboardColors.blue,
+                      ),
+                      DashboardStat(
+                        'Draft',
+                        '${exams.where((e) => e.status == 'draft').length}',
+                        icon: Icons.edit_note,
+                        color: DashboardColors.orange,
+                      ),
+                    ],
+                    if (questions != null)
+                      DashboardStat(
+                        'Total Questions',
+                        '${questions.length}',
+                        icon: Icons.quiz_outlined,
+                        color: DashboardColors.violet,
+                      ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+        const SizedBox(height: 22),
+        DashboardTwoColumn(
+          left: DashboardPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DashboardPanelHeader(
+                  title: 'Recent Exams',
+                  subtitle: 'Latest exams you created',
+                  actionLabel: 'Manage',
+                  onAction: () => _navItems.first.open(context),
+                ),
+                _examList(limit: 3),
+              ],
+            ),
+          ),
+          right: DashboardPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const DashboardPanelHeader(
+                  title: 'Exam Status',
+                  subtitle: 'How your exams are distributed',
+                ),
+                _statusBars(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExams() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const DashboardSectionTitle(
+          'Recent Exams',
+          subtitle: 'Every exam with its current status',
+          padding: EdgeInsets.only(bottom: 14),
+        ),
+        _examList(),
+      ],
+    );
+  }
+
+  Widget _statusBars() {
+    return FutureBuilder<List<ExamModel>>(
+      future: _examsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const DashboardLoading();
+        }
+        final exams = snapshot.data ?? [];
+        if (exams.isEmpty) {
+          return const DashboardMessage(
+            icon: Icons.inbox_outlined,
+            message: 'No exams have been created yet.',
+          );
+        }
+        final published = exams.where((e) => e.status == 'published').length;
+        final draft = exams.where((e) => e.status == 'draft').length;
+        final other = exams.length - published - draft;
+        return Column(
+          children: [
+            DashboardBarRow(
+              label: 'Published',
+              value: published,
+              total: exams.length,
+              color: DashboardColors.emerald,
+            ),
+            DashboardBarRow(
+              label: 'Draft',
+              value: draft,
+              total: exams.length,
+              color: DashboardColors.orange,
+            ),
+            if (other > 0)
+              DashboardBarRow(
+                label: 'Other',
+                value: other,
+                total: exams.length,
+                color: DashboardColors.blue,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _examList({int? limit}) {
+    return FutureBuilder<List<ExamModel>>(
+      future: _examsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const DashboardLoading();
+        }
+        if (snapshot.hasError) {
+          return const DashboardMessage(
+            icon: Icons.error_outline,
+            message: 'Unable to load exams.',
+            isError: true,
+          );
+        }
+        final exams = snapshot.data ?? [];
+        if (exams.isEmpty) {
+          return const DashboardMessage(
+            icon: Icons.inbox_outlined,
+            message: 'No exams have been created yet.',
+          );
+        }
+        final shown = limit == null ? exams : exams.take(limit).toList();
+        return Column(
+          children: [for (final exam in shown) _ExamSummaryTile(exam: exam)],
+        );
+      },
     );
   }
 }
@@ -213,28 +295,24 @@ class _ExamSummaryTile extends StatelessWidget {
 
   final ExamModel exam;
 
+  Color get _statusColor => switch (exam.status) {
+        'published' => DashboardColors.emerald,
+        'draft' => DashboardColors.orange,
+        _ => DashboardColors.blue,
+      };
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(exam.title),
-        subtitle: Text(
-          [
-            if (exam.courseCode != null) exam.courseCode!,
-            '${exam.durationMinutes} min',
-            '${exam.totalMarks} marks',
-          ].join(' • '),
-        ),
-        trailing: Chip(
-          label: Text(
-            exam.status.toUpperCase(),
-            style: const TextStyle(fontSize: 11),
-          ),
-          visualDensity: VisualDensity.compact,
-        ),
-      ),
+    return DashboardListCard(
+      icon: Icons.assignment_outlined,
+      color: _statusColor,
+      title: exam.title,
+      subtitle: [
+        if (exam.courseCode != null) exam.courseCode!,
+        '${exam.durationMinutes} min',
+        '${exam.totalMarks} marks',
+      ].join(' • '),
+      trailing: DashboardPill(label: exam.status, color: _statusColor),
     );
   }
 }
-

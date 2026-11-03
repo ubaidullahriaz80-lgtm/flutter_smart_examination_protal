@@ -114,7 +114,7 @@ class _CsvImportViewState extends State<CsvImportView> {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.5,
-                minWidth: context.isMobile ? double.infinity : 480,
+                minWidth: context.isMobile ? 0 : 480,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

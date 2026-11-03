@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../data/models/generated_question_draft.dart';
 import '../../../data/repositories/question_bank_repository.dart';
 import 'ai_generator_event.dart';
 import 'ai_generator_state.dart';
@@ -22,7 +23,7 @@ class AiGeneratorBloc extends Bloc<AiGeneratorEvent, AiGeneratorState> {
   ) async {
     emit(AiGeneratorLoading());
     try {
-      final drafts = await _repository.generateQuestions(
+      final job = await _repository.generateQuestions(
         examIds: event.examIds,
         topic: event.topic,
         questionTypes: event.questionTypes,
@@ -31,7 +32,14 @@ class AiGeneratorBloc extends Bloc<AiGeneratorEvent, AiGeneratorState> {
         count: event.count,
         marks: event.marks,
       );
-      emit(AiGeneratorResultReady(drafts: drafts));
+      final jobId = (job['job_id'] as num?)?.toInt();
+      if (jobId == null) {
+        throw Exception('The server did not return a generation job ID.');
+      }
+      emit(AiGeneratorJobStarted(
+        jobId: jobId,
+        status: job['status']?.toString() ?? 'GENERATING',
+      ));
     } catch (e) {
       emit(AiGeneratorError(e.toString()));
     }
@@ -65,13 +73,43 @@ class AiGeneratorBloc extends Bloc<AiGeneratorEvent, AiGeneratorState> {
     AiGeneratorPollJobStatus event,
     Emitter<AiGeneratorState> emit,
   ) async {
-    // Current state might be JobStarted
+    // Ignore stale timer events, including polls from a previous generation.
+    final stateBeforeRequest = state;
+    if (stateBeforeRequest is! AiGeneratorJobStarted ||
+        stateBeforeRequest.jobId != event.jobId) {
+      return;
+    }
+
     try {
       final job = await _repository.getJobStatus(event.jobId);
-      emit(AiGeneratorJobStarted(
-        jobId: event.jobId,
-        status: job['status'],
-      ));
+
+      // Poll requests can overlap if the network is slow. A late response
+      // must not replace a completed result (or a newer generation state).
+      final stateAfterRequest = state;
+      if (stateAfterRequest is! AiGeneratorJobStarted ||
+          stateAfterRequest.jobId != event.jobId) {
+        return;
+      }
+
+      final status = job['status']?.toString() ?? 'GENERATING';
+      if (status == 'COMPLETED') {
+        final questions = job['questions'];
+        if (questions is! List) {
+          throw Exception('The completed generation job did not return questions.');
+        }
+        emit(AiGeneratorResultReady(
+          drafts: questions
+              .map((question) => GeneratedQuestionDraft.fromJson(
+                  (question as Map).cast<String, dynamic>()))
+              .toList(),
+        ));
+      } else if (status == 'FAILED') {
+        emit(AiGeneratorError(
+          job['last_error']?.toString() ?? 'Question generation failed.',
+        ));
+      } else if (stateAfterRequest.status != status) {
+        emit(AiGeneratorJobStarted(jobId: event.jobId, status: status));
+      }
     } catch (e) {
       emit(AiGeneratorError(e.toString()));
     }

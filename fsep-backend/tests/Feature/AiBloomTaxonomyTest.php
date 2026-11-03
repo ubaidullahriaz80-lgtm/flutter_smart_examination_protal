@@ -3,11 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Exam;
+use App\Models\AiQuestionGenerationJob;
 use App\Models\User;
 use App\Models\Question;
-use App\Services\AiQuestionGeneratorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Mockery;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class AiBloomTaxonomyTest extends TestCase
@@ -33,22 +33,7 @@ class AiBloomTaxonomyTest extends TestCase
 
     public function test_ai_generation_request_validates_bloom_and_marks(): void
     {
-        $this->instance(
-            AiQuestionGeneratorService::class,
-            Mockery::mock(AiQuestionGeneratorService::class, function ($mock) {
-                $mock->shouldReceive('generate')->andReturn([[
-                    'question_text' => 'Generated MCQ',
-                    'question_type' => 'mcq',
-                    'marks' => 5,
-                    'difficulty' => 'medium',
-                    'bloom_taxonomy' => 'analyze',
-                    'topic_tag' => 'AI',
-                    'options' => ['A', 'B', 'C', 'D'],
-                    'correct_answer' => 'A',
-                    'is_ai_generated' => true
-                ]]);
-            })
-        );
+        Queue::fake();
 
         $response = $this->actingAs($this->examiner)->postJson('/api/questions/generate', [
             'exam_ids' => [$this->exam->id],
@@ -60,11 +45,10 @@ class AiBloomTaxonomyTest extends TestCase
             'marks' => 5
         ]);
 
-        $response->assertStatus(200);
-        $response->assertJsonFragment([
-            'bloom_taxonomy' => 'analyze',
-            'marks' => 5
-        ]);
+        $response->assertStatus(202)->assertJson(['status' => 'GENERATING']);
+        $job = AiQuestionGenerationJob::findOrFail($response->json('job_id'));
+        $this->assertSame('analyze', $job->params['bloom_taxonomy']);
+        $this->assertSame(5, $job->params['marks']);
     }
 
     public function test_ai_generated_question_schema_consistency(): void

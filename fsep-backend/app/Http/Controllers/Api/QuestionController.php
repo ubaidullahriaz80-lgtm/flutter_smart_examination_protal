@@ -2,21 +2,17 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Exceptions\AiProviderException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\QuestionBankResource;
 use App\Jobs\ProcessAiGenerationJob;
+use App\Jobs\ProcessAiTopicGenerationJob;
 use App\Models\AiQuestionGenerationJob;
 use App\Models\Question;
-use App\Services\AiQuestionGeneratorService;
 use App\Services\DocumentParserService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Throwable;
 
 /**
  * Question Bank management, including the AI Question Generator. Every
@@ -33,7 +29,7 @@ class QuestionController extends Controller
      * Deliberately wider than AI_GENERATABLE_TYPES below — matching and
      * code_snippet are manual-entry/manual-review only (see class docs on
      * validatedQuestionData() and GradingService); the AI Question
-     * Generator's Gemini prompt/schema was never built for either, so it
+    * Generator's provider prompt/schema was never built for either, so it
      * must keep validating against the narrower list, not this one.
      */
     private const TYPES = ['mcq', 'true_false', 'short_answer', 'essay', 'matching', 'code_snippet'];
@@ -44,21 +40,18 @@ class QuestionController extends Controller
     /**
      * POST /api/questions/generate
      *
-     * Calls the AI provider (once per selected question type) and returns
-     * validated, structured candidate questions for preview. Nothing is
-     * saved here — saving is a separate, explicit step (store()) so
-     * generated output always goes through review first.
+    * Queues AI generation and returns a job ID immediately. Generated
+    * drafts are exposed by showJob() after the background job completes;
+    * saving remains a separate, explicit step (store()).
      *
      * Accepts either the original single-value fields (`exam_id`,
      * `question_type`) or the new multi-select arrays (`exam_ids`,
      * `question_types`) — both work, so the original single-exam/
      * single-type request shape still behaves exactly as before.
-     * AiQuestionGeneratorService itself is unchanged: it already only
-     * ever generates one question_type per call and knows nothing about
-     * exam_id, so multi-exam/multi-type support lives entirely here, as
-     * a thin loop + a simple deterministic distribution.
+    * The queued processor invokes AiQuestionGeneratorService once per
+    * selected type and distributes completed drafts across selected exams.
      */
-    public function generate(Request $request, AiQuestionGeneratorService $generator)
+    public function generate(Request $request)
     {
         $validated = $request->validate([
             'exam_id' => ['sometimes', 'integer', 'exists:exams,id'],
@@ -94,86 +87,28 @@ class QuestionController extends Controller
             return response()->json(['message' => 'Select at least one question type.'], 422);
         }
 
-        $countPerType = $this->splitEvenly($validated['count'], count($questionTypes));
-        $allQuestions = [];
+        $job = AiQuestionGenerationJob::create([
+            'examiner_id' => $request->user()->id,
+            'status' => 'GENERATING',
+            'exam_ids' => $examIds,
+            'params' => [
+                'topic' => $validated['topic'],
+                'question_types' => $questionTypes,
+                'difficulty' => $validated['difficulty'],
+                'bloom_taxonomy' => $validated['bloom_taxonomy'],
+                'count' => $validated['count'],
+                'marks' => $validated['marks'],
+            ],
+            'generating_at' => now(),
+        ]);
 
-        try {
-            foreach ($questionTypes as $index => $type) {
-                $typeCount = $countPerType[$index];
-                if ($typeCount < 1) {
-                    continue; // more types selected than the requested count
-                }
-
-                $generated = $generator->generate([
-                    'topic' => $validated['topic'],
-                    'question_type' => $type,
-                    'difficulty' => $validated['difficulty'],
-                    'bloom_taxonomy' => $validated['bloom_taxonomy'],
-                    'count' => $typeCount,
-                    'marks' => $validated['marks'],
-                ]);
-
-                array_push($allQuestions, ...$generated);
-            }
-        } catch (AiProviderException $e) {
-            return response()->json(['message' => $e->getMessage()], 502);
-        } catch (Throwable $e) {
-            Log::error('Unexpected AI question generation failure', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'message' => 'Question generation failed unexpectedly. Please try again.',
-            ], 500);
-        }
-
-        $examIdPerQuestion = $this->distributeAcross(count($allQuestions), $examIds);
+        ProcessAiTopicGenerationJob::dispatch($job->id);
 
         return response()->json([
-            'questions' => array_map(
-                fn (array $q, int $i) => $q + ['exam_id' => $examIdPerQuestion[$i]],
-                $allQuestions,
-                array_keys($allQuestions),
-            ),
-        ]);
-    }
-
-    /**
-     * Splits $total into $groups roughly-equal integer parts — the first
-     * (total % groups) groups get one extra, so nothing is dropped when
-     * it doesn't divide evenly. Deliberately simple, no weighting.
-     *
-     * @return array<int, int>
-     */
-    private function splitEvenly(int $total, int $groups): array
-    {
-        $base = intdiv($total, $groups);
-        $remainder = $total % $groups;
-
-        return array_map(
-            fn (int $i) => $base + ($i < $remainder ? 1 : 0),
-            range(0, $groups - 1),
-        );
-    }
-
-    /**
-     * Assigns one value from $values to each of $total items, in
-     * contiguous chunks sized by splitEvenly() — e.g. 10 items over
-     * [examA, examB] -> first 5 items get examA, next 5 get examB.
-     *
-     * @param  array<int, mixed>  $values
-     * @return array<int, mixed>
-     */
-    private function distributeAcross(int $total, array $values): array
-    {
-        $counts = $this->splitEvenly($total, count($values));
-        $assignment = [];
-
-        foreach ($values as $index => $value) {
-            for ($i = 0; $i < $counts[$index]; $i++) {
-                $assignment[] = $value;
-            }
-        }
-
-        return $assignment;
+            'message' => 'Question generation started.',
+            'job_id' => $job->id,
+            'status' => $job->status,
+        ], 202);
     }
 
     public function showJob(AiQuestionGenerationJob $job)
@@ -189,6 +124,7 @@ class QuestionController extends Controller
             'questions_generated' => $job->questions_generated,
             'questions_approved' => $job->questions_approved,
             'questions_rejected' => $job->questions_rejected,
+            'questions' => $job->status === 'COMPLETED' ? $job->generated_questions : null,
             'last_error' => $job->last_error,
             'created_at' => $job->created_at,
             'completed_at' => $job->completed_at,

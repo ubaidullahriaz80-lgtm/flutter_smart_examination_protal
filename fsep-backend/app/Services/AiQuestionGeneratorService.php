@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Service for generating exam questions using Google Gemini API.
+ * Service for generating exam questions using the Groq API.
  */
 class AiQuestionGeneratorService
 {
@@ -22,15 +22,15 @@ class AiQuestionGeneratorService
 
     public function generate(array $params): array
     {
-        $apiKey = config('services.gemini.key');
+        $apiKey = config('services.groq.key');
 
         if (empty($apiKey)) {
             throw new AiProviderException(
-                'The AI provider is not configured. Set GEMINI_API_KEY in the backend .env file.',
+                'The AI provider is not configured. Set GROQ_API_KEY in the backend .env file.',
             );
         }
 
-        $response = $this->callGemini($apiKey, $params);
+        $response = $this->callGroq($apiKey, $params);
         $rawQuestions = $this->extractQuestions($response);
 
         $validated = [];
@@ -50,33 +50,34 @@ class AiQuestionGeneratorService
         return $validated;
     }
 
-    private function callGemini(string $apiKey, array $params): array
+    private function callGroq(string $apiKey, array $params): array
     {
         $schema = [
-            'type' => 'OBJECT',
+            'type' => 'object',
+            'additionalProperties' => false,
             'properties' => [
                 'questions' => [
-                    'type' => 'ARRAY',
+                    'type' => 'array',
                     'items' => [
-                        'type' => 'OBJECT',
+                        'type' => 'object',
+                        'additionalProperties' => false,
                         'properties' => [
-                            'question_text' => ['type' => 'STRING'],
-                            'marks' => ['type' => 'INTEGER'],
+                            'question_text' => ['type' => 'string'],
+                            'marks' => ['type' => 'integer'],
                             'difficulty' => [
-                                'type' => 'STRING',
+                                'type' => 'string',
                                 'enum' => self::ALLOWED_DIFFICULTIES,
                             ],
                             'bloom_taxonomy' => [
-                                'type' => 'STRING',
+                                'type' => 'string',
                                 'enum' => self::ALLOWED_BLOOM_LEVELS,
                             ],
-                            'topic_tag' => ['type' => 'STRING'],
+                            'topic_tag' => ['type' => 'string'],
                             'options' => [
-                                'type' => 'ARRAY',
-                                'items' => ['type' => 'STRING'],
-                                'nullable' => true,
+                                'type' => ['array', 'null'],
+                                'items' => ['type' => 'string'],
                             ],
-                            'correct_answer' => ['type' => 'STRING', 'nullable' => true],
+                            'correct_answer' => ['type' => ['string', 'null']],
                         ],
                         'required' => [
                             'question_text', 'marks', 'difficulty',
@@ -132,47 +133,49 @@ class AiQuestionGeneratorService
             $typeInstructions,
         );
 
-        $primaryModel = config('services.gemini.model', 'gemini-3.5-flash');
-        $modelsToTry = array_unique([$primaryModel, 'gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']);
-
+        $model = config('services.groq.model', 'openai/gpt-oss-20b');
         $lastError = null;
 
-        foreach ($modelsToTry as $model) {
-            for ($attempt = 1; $attempt <= 2; $attempt++) {
-                try {
-                    $response = Http::withHeaders([
-                        'x-goog-api-key' => $apiKey,
-                        'content-type' => 'application/json',
-                    ])
-                        ->timeout(60)
-                        ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                            'contents' => [
-                                ['role' => 'user', 'parts' => [['text' => $prompt]]],
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            try {
+                $response = Http::withToken($apiKey)
+                    ->acceptJson()
+                    ->timeout(45)
+                    ->post('https://api.groq.com/openai/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            [
+                                'role' => 'system',
+                                'content' => 'You are an academic question author. Follow the requested question format exactly.',
                             ],
-                            'generationConfig' => [
-                                'responseMimeType' => 'application/json',
-                                'responseSchema' => $schema,
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                        'response_format' => [
+                            'type' => 'json_schema',
+                            'json_schema' => [
+                                'name' => 'exam_questions',
+                                'strict' => true,
+                                'schema' => $schema,
                             ],
-                        ]);
+                        ],
+                    ]);
 
-                    if ($response->successful()) {
-                        return $response->json() ?? [];
-                    }
+                if ($response->successful()) {
+                    return $response->json() ?? [];
+                }
 
-                    $errMessage = $response->json('error.message') ?? $response->body();
-                    $lastError = $errMessage;
-
-                    if ($response->status() === 503 || $response->status() === 429) {
-                        usleep(1000000);
-                        continue;
-                    }
-
+                $lastError = $response->json('error.message') ?? $response->body();
+                if ($attempt === 2 || ($response->status() < 500 && $response->status() !== 429)) {
                     break;
-                } catch (Throwable $e) {
-                    $lastError = $e->getMessage();
-                    usleep(500000);
+                }
+            } catch (Throwable $e) {
+                $lastError = $e->getMessage();
+                if ($attempt === 2) {
+                    break;
                 }
             }
+
+            usleep(500000);
         }
 
         Log::warning('AI question generation returned an error', ['last_error' => $lastError]);
@@ -181,7 +184,7 @@ class AiQuestionGeneratorService
 
     private function extractQuestions(array $response): array
     {
-        $text = $response['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        $text = $response['choices'][0]['message']['content'] ?? null;
 
         if (is_string($text)) {
             $decoded = json_decode($text, true);

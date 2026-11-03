@@ -12,7 +12,7 @@ class QuestionBankRepository {
 
   final ApiClient _apiClient;
 
-  Future<List<GeneratedQuestionDraft>> generateQuestions({
+  Future<Map<String, dynamic>> generateQuestions({
     required List<int> examIds,
     required String topic,
     required List<String> questionTypes,
@@ -32,23 +32,14 @@ class QuestionBankRepository {
         'count': count,
         'marks': marks,
       },
-      options: Options(
-        sendTimeout: const Duration(minutes: 2),
-        receiveTimeout: const Duration(minutes: 2),
-      ),
     );
 
     final data = response.data;
-    final questions = data?['questions'] ?? data?['data'];
-
-    if (questions is! List) {
-      throw const ApiException('Invalid response from server (expected a list of questions)');
+    if (data == null || data['job_id'] is! num) {
+      throw const ApiException('Invalid response from server (expected a generation job ID)');
     }
 
-    return questions
-        .map((q) =>
-            GeneratedQuestionDraft.fromJson((q as Map).cast<String, dynamic>()))
-        .toList();
+    return data;
   }
 
   Future<Map<String, dynamic>> uploadGenerationDocuments({

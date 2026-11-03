@@ -128,16 +128,20 @@ class QuestionBankListView extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              if (state is QuestionError && state.message.contains('Unable to load')) {
+              if (state is QuestionError) {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.error_outline, size: 48),
+                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
                         const SizedBox(height: 12),
-                        const Text('Unable to load the Question Bank.'),
+                        Text(
+                          state.message,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                         const SizedBox(height: 16),
                         FilledButton(
                           onPressed: () => context.read<QuestionBloc>().add(const LoadQuestions()),
@@ -340,7 +344,11 @@ class _QuestionBankCard extends StatelessWidget {
                         onPressed: onReject, child: const Text('Reject')),
                     const SizedBox(width: 8),
                     FilledButton(
-                        onPressed: onApprove, child: const Text('Approve')),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: onApprove,
+                        child: const Text('Approve')),
                   ],
                 ),
               ],

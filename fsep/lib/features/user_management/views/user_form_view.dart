@@ -126,7 +126,7 @@ class _UserFormViewState extends State<UserFormView> {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.5,
-                minWidth: context.isMobile ? double.infinity : 400,
+                minWidth: context.isMobile ? 0 : 400,
               ),
               child: Form(
                 key: _formKey,
@@ -202,8 +202,11 @@ class _UserFormViewState extends State<UserFormView> {
                       future: _departmentsFuture,
                       builder: (context, snapshot) {
                         final depts = snapshot.data ?? [];
+                        final validDeptId = depts.any((d) => d['id'] == _selectedDepartmentId)
+                            ? _selectedDepartmentId
+                            : null;
                         return DropdownButtonFormField<int>(
-                          initialValue: _selectedDepartmentId,
+                          initialValue: validDeptId,
                           decoration: const InputDecoration(labelText: 'Department'),
                           items: [
                             const DropdownMenuItem(value: null, child: Text('No Department')),
@@ -220,7 +223,9 @@ class _UserFormViewState extends State<UserFormView> {
                     if (_selectedRole == UserRole.candidate) ...[
                       const SizedBox(height: 16),
                       DropdownButtonFormField<int>(
-                        initialValue: _selectedSemester,
+                        initialValue: (_selectedSemester != null && _selectedSemester! >= 1 && _selectedSemester! <= 8)
+                            ? _selectedSemester
+                            : null,
                         decoration: const InputDecoration(labelText: 'Semester'),
                         items: [
                           const DropdownMenuItem(value: null, child: Text('N/A')),

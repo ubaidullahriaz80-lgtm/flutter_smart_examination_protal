@@ -3,7 +3,7 @@
 This is the **Flutter frontend** for FSEP (Flutter Smart Examination
 Portal). It talks to the Laravel backend in the sibling `fsep-backend`
 folder — **see `fsep-backend/README.md` for the full project setup
-guide** (backend setup, database, Gemini API key, demo accounts, demo
+guide** (backend setup, database, Groq API key, demo accounts, demo
 flow, and known limitations). This file only covers the Flutter side.
 
 ## Requirements

@@ -312,7 +312,7 @@ class _QuestionFormViewState extends State<QuestionFormView> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: context.isMobile ? double.infinity : context.screenWidth * 0.6,
-                    minWidth: context.isMobile ? double.infinity : 400,
+                    minWidth: context.isMobile ? 0 : 400,
                   ),
                   child: BlocBuilder<QuestionBloc, QuestionState>(
                     builder: (context, state) {
